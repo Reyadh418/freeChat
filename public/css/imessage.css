@@ -1,0 +1,657 @@
+/* ==========================================================================
+   freeChat: Apple iMessage Interface & Liquid Animations
+   ========================================================================== */
+
+/* 1. APP LAYOUT & SIDEBAR */
+.sidebar {
+  width: 360px;
+  min-width: 320px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+}
+
+.sidebar-header {
+  padding: 16px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--spring-smooth);
+}
+
+.icon-btn:hover {
+  background: var(--bg-item-active);
+  transform: scale(1.06);
+}
+
+.icon-btn:active {
+  transform: scale(0.94);
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Search Bar Pill */
+.search-bar-container {
+  padding: 0 16px 12px;
+}
+
+.search-pill {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border-radius: 12px;
+  border: 1px solid var(--border-glass);
+}
+
+.search-pill svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.search-pill input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.search-pill input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* Conversation List */
+.conversations-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--spring-smooth);
+  position: relative;
+}
+
+.conv-item:hover {
+  background: var(--bg-item-hover);
+}
+
+.conv-item.active {
+  background: var(--bg-item-active);
+}
+
+.conv-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.conv-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.conv-item-name {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conv-item-time {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.conv-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.conv-item-preview {
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* User Profile footer in sidebar */
+.sidebar-footer {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-glass);
+}
+
+.user-profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-profile-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-profile-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.user-profile-status {
+  font-size: 12px;
+  color: var(--status-online);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 2. CHAT MAIN PANE */
+.chat-pane {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Chat Header */
+.chat-header {
+  height: 64px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 5;
+}
+
+.chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chat-header-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header-name {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.chat-header-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.e2e-lock-icon {
+  width: 12px;
+  height: 12px;
+  fill: var(--status-online);
+}
+
+/* Back button on mobile */
+.btn-back {
+  display: none;
+  margin-right: 4px;
+}
+
+/* Messages Scroll Area */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Date Dividers (iOS iMessage Style) */
+.date-divider {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 14px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Message Bubble Cluster */
+.message-row {
+  display: flex;
+  flex-direction: column;
+  max-width: 68%;
+  position: relative;
+  animation: bubblePop 0.28s var(--spring-bounce) forwards;
+}
+
+@keyframes bubblePop {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.message-row.sent {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.message-row.received {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+/* Liquid Bubble Design */
+.bubble {
+  padding: 10px 16px;
+  font-size: 15.5px;
+  line-height: 1.38;
+  word-break: break-word;
+  user-select: text;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Sent Bubbles (iOS Blue Gradient) */
+.message-row.sent .bubble {
+  background: linear-gradient(180deg, var(--imessage-blue-start) 0%, var(--imessage-blue-end) 100%);
+  color: var(--imessage-blue-text);
+  border-radius: 19px 19px 4px 19px;
+}
+
+/* Received Bubbles (Liquid Glass / Frosted Grey) */
+.message-row.received .bubble {
+  background: var(--bg-bubble-received);
+  color: var(--text-bubble-received);
+  border-radius: 19px 19px 19px 4px;
+}
+
+.bubble-meta {
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.message-row.sent .bubble-meta {
+  justify-content: flex-end;
+}
+
+/* Typing Indicator Bubble */
+.typing-bubble {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 18px;
+  background: var(--bg-bubble-received);
+  border-radius: 19px 19px 19px 4px;
+  width: fit-content;
+  margin-bottom: 6px;
+  animation: bubblePop 0.25s var(--spring-bounce) forwards;
+}
+
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.6;
+  animation: typingDot 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+/* 3. BOTTOM COMPOSER (Capsule Style) */
+.chat-composer {
+  padding: 12px 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 5;
+}
+
+.composer-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
+  border-radius: 22px;
+  padding: 6px 14px;
+  min-height: 44px;
+}
+
+.composer-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.35;
+  resize: none;
+  max-height: 120px;
+  padding: 4px 0;
+}
+
+.composer-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.btn-send {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--imessage-blue-end);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--duration-fast) var(--spring-bounce);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.btn-send.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1.05);
+}
+
+.btn-send.active:active {
+  transform: scale(0.92);
+}
+
+.btn-send svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  transform: translateY(-0.5px);
+}
+
+/* Empty State / Welcome Splash */
+.empty-chat-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+  gap: 16px;
+}
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.2), rgba(175, 82, 222, 0.2));
+  border: 1px solid var(--border-glass);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-blue);
+}
+
+.empty-state-icon svg {
+  width: 40px;
+  height: 40px;
+  fill: currentColor;
+}
+
+/* 4. MODALS & FORMS */
+.auth-card {
+  width: 90%;
+  max-width: 400px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0a84ff, #007aff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(0, 122, 255, 0.35);
+}
+
+.auth-logo svg {
+  width: 32px;
+  height: 32px;
+  fill: currentColor;
+}
+
+.auth-tabs {
+  display: flex;
+  background: var(--bg-input);
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--border-glass);
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.auth-tab.active {
+  background: var(--bg-modal);
+  color: var(--text-primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding-left: 2px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 15px;
+  transition: border-color var(--duration-fast);
+}
+
+.form-input:focus {
+  border-color: var(--text-blue);
+}
+
+.crypto-status-indicator {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* User Search Modal */
+.search-results-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.search-result-item:hover {
+  background: var(--bg-item-active);
+  border-color: var(--text-blue);
+}
+
+/* 5. RESPONSIVE BREAKPOINTS (Mobile iMessage Flow) */
+@media (max-width: 768px) {
+  .app-container {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+  }
+
+  .sidebar {
+    width: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    transition: transform var(--duration-normal) var(--spring-smooth);
+  }
+
+  .chat-pane {
+    width: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    transform: translateX(100%);
+    transition: transform var(--duration-normal) var(--spring-smooth);
+  }
+
+  body.chat-active .sidebar {
+    transform: translateX(-25%);
+  }
+
+  body.chat-active .chat-pane {
+    transform: translateX(0);
+  }
+
+  .btn-back {
+    display: flex;
+  }
+
+  .message-row {
+    max-width: 82%;
+  }
+}
+

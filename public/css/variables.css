@@ -1,0 +1,86 @@
+/* ==========================================================================
+   freeChat: Apple iOS Design Tokens & Dynamic Color System
+   ========================================================================== */
+
+:root {
+  /* iOS Typography */
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* iOS Light Mode Theme */
+  --bg-app: #f2f2f7;
+  --bg-sidebar: rgba(246, 246, 246, 0.75);
+  --bg-chat-pane: rgba(255, 255, 255, 0.65);
+  --bg-header: rgba(246, 246, 246, 0.85);
+  --bg-composer: rgba(255, 255, 255, 0.85);
+  --bg-input: rgba(230, 230, 235, 0.8);
+  --bg-bubble-received: #e9e9eb;
+  --text-bubble-received: #000000;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.35);
+  --bg-modal: rgba(255, 255, 255, 0.88);
+  --bg-item-hover: rgba(0, 0, 0, 0.04);
+  --bg-item-active: rgba(0, 122, 255, 0.12);
+
+  /* Text & Labels */
+  --text-primary: #000000;
+  --text-secondary: #8e8e93;
+  --text-tertiary: #c7c7cc;
+  --text-blue: #007aff;
+
+  /* iMessage Blue Gradient */
+  --imessage-blue-start: #0a84ff;
+  --imessage-blue-end: #007aff;
+  --imessage-blue-text: #ffffff;
+
+  /* Borders & Glass Dividers */
+  --border-glass: rgba(0, 0, 0, 0.08);
+  --border-highlight: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+  --glass-blur: 25px;
+
+  /* Status Colors */
+  --status-online: #34c759;
+  --status-offline: #8e8e93;
+  --badge-bg: #ff3b30;
+
+  /* Spring Transitions */
+  --spring-bounce: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --spring-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  --duration-fast: 0.2s;
+  --duration-normal: 0.35s;
+}
+
+/* iOS Dark Mode Theme */
+[data-theme="dark"] {
+  --bg-app: #000000;
+  --bg-sidebar: rgba(24, 24, 26, 0.72);
+  --bg-chat-pane: rgba(18, 18, 20, 0.65);
+  --bg-header: rgba(28, 28, 30, 0.82);
+  --bg-composer: rgba(28, 28, 30, 0.85);
+  --bg-input: rgba(44, 44, 46, 0.8);
+  --bg-bubble-received: #26252a;
+  --text-bubble-received: #ffffff;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.65);
+  --bg-modal: rgba(30, 30, 32, 0.88);
+  --bg-item-hover: rgba(255, 255, 255, 0.06);
+  --bg-item-active: rgba(10, 132, 255, 0.2);
+
+  /* Text & Labels */
+  --text-primary: #ffffff;
+  --text-secondary: #98989d;
+  --text-tertiary: #48484a;
+  --text-blue: #0a84ff;
+
+  /* iMessage Blue Gradient */
+  --imessage-blue-start: #0a84ff;
+  --imessage-blue-end: #006ee6;
+  --imessage-blue-text: #ffffff;
+
+  /* Borders & Glass Dividers */
+  --border-glass: rgba(255, 255, 255, 0.12);
+  --border-highlight: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+
+  --status-online: #30d158;
+}
+

@@ -1,0 +1,118 @@
+/* ==========================================================================
+   freeChat: Apple Liquid Glass & Glassmorphism Styling
+   ========================================================================== */
+
+.glass-panel {
+  background: var(--bg-chat-pane);
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  border: 1px solid var(--border-glass);
+}
+
+.glass-sidebar {
+  background: var(--bg-sidebar);
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  border-right: 1px solid var(--border-glass);
+}
+
+.glass-header {
+  background: var(--bg-header);
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  border-bottom: 1px solid var(--border-glass);
+  box-shadow: 0 1px 0 0 var(--border-glass);
+}
+
+.glass-composer {
+  background: var(--bg-composer);
+  backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(190%);
+  border-top: 1px solid var(--border-glass);
+}
+
+.glass-card {
+  background: var(--bg-modal);
+  backdrop-filter: blur(35px) saturate(200%);
+  -webkit-backdrop-filter: blur(35px) saturate(200%);
+  border: 1px solid var(--border-glass);
+  border-top: 1px solid var(--border-highlight);
+  box-shadow: var(--glass-shadow);
+  border-radius: 22px;
+}
+
+.glass-pill {
+  background: var(--bg-input);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+}
+
+.glass-btn {
+  background: var(--bg-input);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--spring-smooth);
+}
+
+.glass-btn:hover {
+  background: var(--bg-item-hover);
+  transform: scale(1.02);
+}
+
+.glass-btn:active {
+  transform: scale(0.96);
+}
+
+.glass-btn-primary {
+  background: linear-gradient(180deg, var(--imessage-blue-start), var(--imessage-blue-end));
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.35);
+}
+
+.glass-btn-primary:hover {
+  background: linear-gradient(180deg, var(--imessage-blue-start), #0069d9);
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.45);
+  transform: scale(1.02);
+}
+
+.glass-btn-primary:active {
+  transform: scale(0.96);
+}
+
+/* Liquid modal backdrop */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-modal-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--duration-normal) var(--spring-smooth);
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-overlay .glass-card {
+  transform: scale(0.92) translateY(20px);
+  transition: all var(--duration-normal) var(--spring-bounce);
+}
+
+.modal-overlay.active .glass-card {
+  transform: scale(1) translateY(0);
+}
+

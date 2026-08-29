@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
+  <title>freeChat • Private E2EE Messenger</title>
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/glass.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/imessage.css">
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!-- Ambient Liquid Glass Mesh Wallpaper -->
+  <div class="app-background-mesh"></div>
+
+  <!-- Toast Notification System (Dynamic Island Style) -->
+  <div id="toast-container"></div>
+
+  <!-- Main App Shell -->
+  <div class="app-container">
+
+    <!-- LEFT SIDEBAR: Messages & Inboxes -->
+    <aside class="sidebar glass-sidebar">
+      <header class="sidebar-header">
+        <h1 class="sidebar-title">Messages</h1>
+        <div class="header-actions">
+          <button id="theme-toggle-btn" class="icon-btn" title="Toggle Theme">
+            <svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
+          </button>
+          <button id="new-chat-btn" class="icon-btn" title="New Message">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Search Bar -->
+      <div class="search-bar-container">
+        <div class="search-pill">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" placeholder="Search conversations..." id="search-conv-input">
+        </div>
+      </div>
+
+      <!-- Conversations Scrollable List -->
+      <div class="conversations-list" id="conversations-list">
+        <!-- Rendered dynamically by ui.js -->
+      </div>
+
+      <!-- User Profile & Security Badge Footer -->
+      <footer class="sidebar-footer">
+        <div class="user-profile-summary">
+          <div class="avatar" id="sidebar-avatar" style="background-color: #007AFF;">?</div>
+          <div class="user-profile-info">
+            <span class="user-profile-name" id="sidebar-username">@anonymous</span>
+            <span class="user-profile-status">
+              <svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+              E2EE Active
+            </span>
+          </div>
+        </div>
+        <button id="logout-btn" class="icon-btn" title="Log Out" style="color: var(--text-secondary);">
+          <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+        </button>
+      </footer>
+    </aside>
+
+    <!-- RIGHT CHAT PANE: iMessage Active Conversation -->
+    <main class="chat-pane glass-panel" id="chat-pane">
+
+      <!-- Empty State View (Before selecting a chat) -->
+      <div class="empty-chat-state" id="empty-chat-state">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+        </div>
+        <h2 style="font-size: 22px; font-weight: 700;">Zero-Knowledge iMessage</h2>
+        <p style="color: var(--text-secondary); max-width: 320px; font-size: 15px; line-height: 1.4;">
+          Your messages are encrypted end-to-end directly in your browser with ECDH P-256 and AES-256-GCM.
+        </p>
+        <button class="glass-btn glass-btn-primary" onclick="document.getElementById('new-chat-btn').click()" style="padding: 10px 22px; font-size: 15px; margin-top: 8px;">
+          Start a Private Chat
+        </button>
+      </div>
+
+      <!-- Active Conversation View -->
+      <div id="active-chat-view" style="display: none; flex-direction: column; width: 100%; height: 100%;">
+        <!-- Header -->
+        <header class="chat-header glass-header">
+          <div class="chat-header-info">
+            <button class="icon-btn btn-back" id="btn-back" title="Back to chats">
+              <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+            <div class="avatar" id="chat-header-avatar" style="background-color: #007AFF;">?</div>
+            <div class="chat-header-details">
+              <span class="chat-header-name" id="chat-header-name">Recipient</span>
+              <span class="chat-header-subtitle" id="chat-header-subtitle">iMessage • End-to-End Encrypted 🔒</span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Messages Flow -->
+        <div class="messages-container" id="messages-container">
+          <!-- Rendered dynamically by ui.js -->
+        </div>
+
+        <!-- Composer Capsule -->
+        <footer class="chat-composer glass-composer">
+          <div class="composer-pill">
+            <textarea 
+              id="composer-input" 
+              class="composer-input" 
+              placeholder="iMessage" 
+              rows="1"
+            ></textarea>
+            <button id="send-btn" class="btn-send" title="Send Message">
+              <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+          </div>
+        </footer>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- AUTHENTICATION MODAL (Liquid Glass Card) -->
+  <div class="modal-overlay" id="auth-modal">
+    <div class="glass-card auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+        </div>
+        <h2 id="auth-title" style="font-size: 22px; font-weight: 700; margin-top: 4px;">Welcome Back</h2>
+        <p id="auth-subtitle" style="font-size: 14px; color: var(--text-secondary);">Sign in with your private credentials</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" type="button">Sign In</button>
+        <button class="auth-tab" id="tab-register" type="button">Create Account</button>
+      </div>
+
+      <form id="auth-form" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="form-group">
+          <label class="form-label" for="auth-username">Username</label>
+          <input type="text" id="auth-username" class="form-input" placeholder="e.g. reyadh" autocomplete="username" required minlength="3" maxlength="30">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="auth-password">Password / Passphrase</label>
+          <input type="password" id="auth-password" class="form-input" placeholder="••••••••••••" autocomplete="current-password" required minlength="6">
+        </div>
+
+        <div class="crypto-status-indicator" id="auth-crypto-status">
+          🔒 Zero-Knowledge Security Active
+        </div>
+
+        <button type="submit" id="auth-submit-btn" class="glass-btn glass-btn-primary" style="padding: 13px; font-size: 16px; font-weight: 600; margin-top: 4px;">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- NEW CHAT USER SEARCH MODAL -->
+  <div class="modal-overlay" id="new-chat-modal">
+    <div class="glass-card" style="width: 90%; max-width: 420px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="font-size: 18px; font-weight: 700;">New Conversation</h3>
+        <button id="close-new-chat-btn" class="icon-btn" style="width: 30px; height: 30px;" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+
+      <div class="search-pill">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input type="text" id="user-search-input" placeholder="Type username..." autocomplete="off">
+      </div>
+
+      <div class="search-results-list" id="search-results-list">
+        <!-- Live search results rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.io client script -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Application Entry -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration error:', err));
+      });
+    }
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,30 @@
+{
+  "name": "freechat",
+  "version": "1.0.0",
+  "description": "Zero-knowledge E2E encrypted private messaging with Apple iMessage Liquid Glass UI",
+  "main": "server/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js"
+  },
+  "keywords": [
+    "e2ee",
+    "chat",
+    "imessage",
+    "liquid-glass",
+    "supabase",
+    "render",
+    "vanilla-js"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
+
