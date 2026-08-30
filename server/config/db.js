@@ -18,7 +18,7 @@ const isSupabaseConfigured = Boolean(
 
 let supabase = null;
 
-// Local JSON file store for offline / zero-config local development
+// Local fallback store
 const dbDir = path.join(__dirname, '../../database');
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
@@ -48,20 +48,13 @@ function saveLocalData(data) {
 }
 
 if (isSupabaseConfigured) {
-  console.log('[DB] Connecting to Supabase Cloud PostgreSQL...');
   supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-} else {
-  console.log('[DB] Running with local persistent data store (database/local_db.json)...');
-  console.log('[DB] (To use Supabase Cloud, fill in SUPABASE_URL and SUPABASE_KEY in .env)');
 }
 
-/**
- * Universal Database Adapter interface
- */
 export const db = {
   isSupabase: isSupabaseConfigured,
   
-  // User operations
+  // Users
   async getUserByUsername(username) {
     const cleanUsername = username.toLowerCase().trim();
     if (isSupabaseConfigured) {
@@ -168,7 +161,7 @@ export const db = {
     }
   },
 
-  // Conversation operations
+  // Conversations
   async findDirectConversation(user1Id, user2Id) {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
@@ -340,7 +333,7 @@ export const db = {
     }
   },
 
-  // Message operations
+  // Messages
   async saveMessage({ conversation_id, sender_id, ciphertext, iv, sender_public_key = null, media_url = null, media_type = null }) {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -415,4 +408,3 @@ export const db = {
     }
   }
 };
-

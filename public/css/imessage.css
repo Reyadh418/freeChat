@@ -1,8 +1,4 @@
-/* ==========================================================================
-   freeChat: Apple iMessage Interface & Liquid Animations
-   ========================================================================== */
-
-/* 1. APP LAYOUT & SIDEBAR */
+/* Sidebar */
 .sidebar {
   width: 360px;
   min-width: 320px;
@@ -61,7 +57,7 @@
   fill: currentColor;
 }
 
-/* Search Bar Pill */
+/* Search bar */
 .search-bar-container {
   padding: 0 16px 12px;
 }
@@ -96,7 +92,7 @@
   color: var(--text-secondary);
 }
 
-/* Conversation List */
+/* Conversation list */
 .conversations-list {
   flex: 1;
   overflow-y: auto;
@@ -168,7 +164,7 @@
   text-overflow: ellipsis;
 }
 
-/* User Profile footer in sidebar */
+/* Sidebar footer */
 .sidebar-footer {
   padding: 12px 16px;
   display: flex;
@@ -201,7 +197,7 @@
   gap: 4px;
 }
 
-/* 2. CHAT MAIN PANE */
+/* Chat pane */
 .chat-pane {
   flex: 1;
   height: 100%;
@@ -210,7 +206,7 @@
   position: relative;
 }
 
-/* Chat Header */
+/* Chat header */
 .chat-header {
   height: 64px;
   padding: 0 20px;
@@ -251,13 +247,12 @@
   fill: var(--status-online);
 }
 
-/* Back button on mobile */
 .btn-back {
   display: none;
   margin-right: 4px;
 }
 
-/* Messages Scroll Area */
+/* Messages */
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -267,7 +262,6 @@
   gap: 6px;
 }
 
-/* Date Dividers (iOS iMessage Style) */
 .date-divider {
   align-self: center;
   font-size: 12px;
@@ -278,7 +272,6 @@
   letter-spacing: 0.3px;
 }
 
-/* Message Bubble Cluster */
 .message-row {
   display: flex;
   flex-direction: column;
@@ -308,7 +301,7 @@
   align-items: flex-start;
 }
 
-/* Liquid Bubble Design */
+/* Bubbles */
 .bubble {
   padding: 10px 16px;
   font-size: 15.5px;
@@ -319,14 +312,12 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-/* Sent Bubbles (iOS Blue Gradient) */
 .message-row.sent .bubble {
   background: linear-gradient(180deg, var(--imessage-blue-start) 0%, var(--imessage-blue-end) 100%);
   color: var(--imessage-blue-text);
   border-radius: 19px 19px 4px 19px;
 }
 
-/* Received Bubbles (Liquid Glass / Frosted Grey) */
 .message-row.received .bubble {
   background: var(--bg-bubble-received);
   color: var(--text-bubble-received);
@@ -346,7 +337,7 @@
   justify-content: flex-end;
 }
 
-/* Typing Indicator Bubble */
+/* Typing indicator */
 .typing-bubble {
   display: flex;
   align-items: center;
@@ -383,7 +374,7 @@
   }
 }
 
-/* 3. BOTTOM COMPOSER (Capsule Style) */
+/* Composer */
 .chat-composer {
   padding: 12px 20px 16px;
   display: flex;
@@ -454,7 +445,7 @@
   transform: translateY(-0.5px);
 }
 
-/* Empty State / Welcome Splash */
+/* Empty state */
 .empty-chat-state {
   flex: 1;
   display: flex;
@@ -484,7 +475,7 @@
   fill: currentColor;
 }
 
-/* 4. MODALS & FORMS */
+/* Modals & forms */
 .auth-card {
   width: 90%;
   max-width: 400px;
@@ -586,7 +577,7 @@
   gap: 6px;
 }
 
-/* User Search Modal */
+/* User search */
 .search-results-list {
   max-height: 260px;
   overflow-y: auto;
@@ -613,7 +604,7 @@
   border-color: var(--text-blue);
 }
 
-/* 5. RESPONSIVE BREAKPOINTS (Mobile iMessage Flow) */
+/* Responsive */
 @media (max-width: 768px) {
   .app-container {
     width: 100vw;
@@ -654,4 +645,3 @@
     max-width: 82%;
   }
 }
-

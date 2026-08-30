@@ -3,7 +3,7 @@ import { db } from '../config/db.js';
 
 const router = express.Router();
 
-// 1. Search users by username
+// Search users
 router.get('/users/search', async (req, res) => {
   try {
     const { q, exclude } = req.query;
@@ -14,12 +14,12 @@ router.get('/users/search', async (req, res) => {
     const users = await db.searchUsers(q.trim(), exclude || null);
     res.json(users);
   } catch (err) {
-    console.error('[Chat Search Users Error]:', err);
+    console.error('[Chat Error]:', err);
     res.status(500).json({ error: 'Failed to search users.' });
   }
 });
 
-// 2. Get all conversations for a user
+// Conversations
 router.get('/conversations', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -30,12 +30,12 @@ router.get('/conversations', async (req, res) => {
     const conversations = await db.getUserConversations(userId);
     res.json(conversations);
   } catch (err) {
-    console.error('[Chat Get Conversations Error]:', err);
+    console.error('[Chat Error]:', err);
     res.status(500).json({ error: 'Failed to load conversations.' });
   }
 });
 
-// 3. Get or Create a 1-on-1 Direct Conversation
+// Direct chat
 router.post('/conversations/direct', async (req, res) => {
   try {
     const { currentUserId, targetUsername } = req.body;
@@ -49,10 +49,9 @@ router.post('/conversations/direct', async (req, res) => {
     }
 
     if (targetUser.id === currentUserId) {
-      return res.status(400).json({ error: 'Cannot start a direct conversation with yourself.' });
+      return res.status(400).json({ error: 'Cannot start a conversation with yourself.' });
     }
 
-    // Check if conversation already exists
     let conv = await db.findDirectConversation(currentUserId, targetUser.id);
     if (!conv) {
       conv = await db.createConversation({
@@ -77,12 +76,12 @@ router.post('/conversations/direct', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Chat Create Direct Conv Error]:', err);
+    console.error('[Chat Error]:', err);
     res.status(500).json({ error: 'Failed to create conversation.' });
   }
 });
 
-// 4. Get message history for a conversation
+// Messages
 router.get('/conversations/:convId/messages', async (req, res) => {
   try {
     const { convId } = req.params;
@@ -91,10 +90,9 @@ router.get('/conversations/:convId/messages', async (req, res) => {
     const messages = await db.getConversationMessages(convId, limit);
     res.json(messages);
   } catch (err) {
-    console.error('[Chat Get Messages Error]:', err);
+    console.error('[Chat Error]:', err);
     res.status(500).json({ error: 'Failed to load messages.' });
   }
 });
 
 export default router;
-

@@ -3,13 +3,13 @@ import { db } from '../config/db.js';
 
 const router = express.Router();
 
-// 1. User Registration (Zero-Knowledge)
+// Register
 router.post('/register', async (req, res) => {
   try {
     const { username, auth_verifier, public_key, encrypted_priv_key, salt, iv, avatar_color } = req.body;
 
     if (!username || !auth_verifier || !public_key || !encrypted_priv_key || !salt || !iv) {
-      return res.status(400).json({ error: 'Missing required cryptographic registration fields.' });
+      return res.status(400).json({ error: 'Missing registration fields.' });
     }
 
     const cleanUsername = username.trim().toLowerCase();
@@ -45,12 +45,12 @@ router.post('/register', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Auth Register Error]:', err);
+    console.error('[Auth Error]:', err);
     res.status(500).json({ error: 'Failed to register account.' });
   }
 });
 
-// 2. Pre-login: Fetch salt and encrypted key backup for client-side password derivation
+// Pre-login
 router.post('/pre-login', async (req, res) => {
   try {
     const { username } = req.body;
@@ -69,12 +69,12 @@ router.post('/pre-login', async (req, res) => {
       encrypted_priv_key: user.encrypted_priv_key
     });
   } catch (err) {
-    console.error('[Auth Pre-Login Error]:', err);
+    console.error('[Auth Error]:', err);
     res.status(500).json({ error: 'Failed to fetch login parameters.' });
   }
 });
 
-// 3. Login: Authenticate with client-derived auth verifier
+// Login
 router.post('/login', async (req, res) => {
   try {
     const { username, auth_verifier } = req.body;
@@ -103,12 +103,12 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Auth Login Error]:', err);
+    console.error('[Auth Error]:', err);
     res.status(500).json({ error: 'Failed to log in.' });
   }
 });
 
-// 4. Get Public Profile / Public Key for any user
+// Profile
 router.get('/user/:username', async (req, res) => {
   try {
     const user = await db.getUserByUsername(req.params.username.trim().toLowerCase());
@@ -125,10 +125,9 @@ router.get('/user/:username', async (req, res) => {
       last_seen: user.last_seen
     });
   } catch (err) {
-    console.error('[Auth Get User Error]:', err);
+    console.error('[Auth Error]:', err);
     res.status(500).json({ error: 'Failed to fetch user profile.' });
   }
 });
 
 export default router;
-

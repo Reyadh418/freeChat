@@ -1,7 +1,3 @@
-/**
- * freeChat: Socket.io Realtime Client
- */
-
 let socket = null;
 
 export const Realtime = {
@@ -16,12 +12,10 @@ export const Realtime = {
       socket.disconnect();
     }
 
-    // Connect to host Socket.io
     // @ts-ignore
     socket = window.io();
 
     socket.on('connect', () => {
-      console.log('[Realtime] Connected to live messaging relay');
       socket.emit('user_connected', userId);
     });
 
@@ -47,10 +41,6 @@ export const Realtime = {
       if (typeof onConversationUpdated === 'function') {
         onConversationUpdated(data);
       }
-    });
-
-    socket.on('disconnect', () => {
-      console.log('[Realtime] Disconnected from relay');
     });
 
     return socket;
@@ -101,4 +91,3 @@ export const Realtime = {
     }
   }
 };
-

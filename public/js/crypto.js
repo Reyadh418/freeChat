@@ -1,15 +1,7 @@
-/**
- * freeChat: Native Web Crypto API & Zero-Knowledge Cryptography Engine
- * - Algorithm: ECDH (P-256) for shared key exchange
- * - Algorithm: AES-256-GCM for message & payload encryption
- * - Algorithm: PBKDF2 (100,000 iterations, SHA-256) for password key derivation
- * - Storage: Browser IndexedDB for non-volatile key persistence
- */
-
-// Memory cache for derived 1-on-1 shared keys (targetUserId -> CryptoKey)
+// Key cache
 const sharedKeyCache = new Map();
 
-// Helper: ArrayBuffer <-> Base64 conversion
+// Base64 helpers
 export function arrayBufferToBase64(buffer) {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -30,26 +22,23 @@ export function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
-// Helper: Generate Cryptographically Secure Random Salt & IV
+// Random bytes
 export function generateRandomBytes(length = 16) {
   const bytes = new Uint8Array(length);
   window.crypto.getRandomValues(bytes);
   return bytes;
 }
 
-/**
- * 1. Key Pair Generation (ECDH P-256)
- */
+// Key generation
 export async function generateKeyPair() {
-  const keyPair = await window.crypto.subtle.generateKey(
+  return await window.crypto.subtle.generateKey(
     {
       name: 'ECDH',
       namedCurve: 'P-256'
     },
-    true, // Extractable so we can backup and cache
+    true,
     ['deriveKey', 'deriveBits']
   );
-  return keyPair;
 }
 
 export async function exportPublicKey(publicKey) {
@@ -90,9 +79,7 @@ export async function importPrivateKey(jwkString) {
   );
 }
 
-/**
- * 2. Password-based Key Derivation (PBKDF2)
- */
+// Password derivation
 export async function deriveMasterKey(password, saltBuffer) {
   const enc = new TextEncoder();
   const passwordKey = await window.crypto.subtle.importKey(
@@ -103,7 +90,7 @@ export async function deriveMasterKey(password, saltBuffer) {
     ['deriveKey', 'deriveBits']
   );
 
-  const masterKey = await window.crypto.subtle.deriveKey(
+  return await window.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: saltBuffer,
@@ -115,8 +102,6 @@ export async function deriveMasterKey(password, saltBuffer) {
     true,
     ['encrypt', 'decrypt']
   );
-
-  return masterKey;
 }
 
 export async function deriveAuthVerifier(password, saltBase64) {
@@ -126,9 +111,7 @@ export async function deriveAuthVerifier(password, saltBase64) {
   return arrayBufferToBase64(hashBuffer);
 }
 
-/**
- * 3. Encrypted Private Key Cloud Backup
- */
+// Key backup
 export async function encryptPrivateKeyBackup(privateKey, masterKey) {
   const privateKeyJwk = await exportPrivateKey(privateKey);
   const enc = new TextEncoder();
@@ -162,9 +145,7 @@ export async function decryptPrivateKeyBackup(encryptedBase64, ivBase64, masterK
   return await importPrivateKey(jwkString);
 }
 
-/**
- * 4. 1-on-1 Shared Secret Derivation (ECDH)
- */
+// Key exchange
 export async function getSharedSecretKey(localPrivateKey, remotePublicKeyJwk, cacheId = null) {
   if (cacheId && sharedKeyCache.has(cacheId)) {
     return sharedKeyCache.get(cacheId);
@@ -193,9 +174,7 @@ export async function getSharedSecretKey(localPrivateKey, remotePublicKeyJwk, ca
   return sharedKey;
 }
 
-/**
- * 5. Message Encryption & Decryption (AES-256-GCM)
- */
+// Message encryption
 export async function encryptMessage(plainText, sharedKey) {
   const enc = new TextEncoder();
   const encoded = enc.encode(plainText);
@@ -232,9 +211,7 @@ export async function decryptMessage(ciphertextBase64, ivBase64, sharedKey) {
   }
 }
 
-/**
- * 6. Local IndexedDB Key Store for Instant Session Persistence
- */
+// Key store
 const DB_NAME = 'freeChat_CryptoVault';
 const STORE_NAME = 'keys';
 
@@ -303,4 +280,3 @@ export const KeyStore = {
     });
   }
 };
-

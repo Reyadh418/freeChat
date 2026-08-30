@@ -1,7 +1,3 @@
-/**
- * freeChat: UI Rendering Engine & Helpers
- */
-
 export function escapeHtml(str) {
   if (!str) return '';
   const div = document.createElement('div');
@@ -52,7 +48,6 @@ export function showToast(message, duration = 3000) {
 }
 
 export function renderConversationItem(conv, currentUserId, isActive = false) {
-  // Identify the other participant
   const otherParticipant = conv.conversation_participants?.find(
     p => (p.user_id || p.users?.id) !== currentUserId
   )?.users || { username: conv.title || 'Unknown', avatar_color: '#007AFF' };
@@ -130,4 +125,3 @@ export function scrollToBottom(element, smooth = true) {
     behavior: smooth ? 'smooth' : 'auto'
   });
 }
-

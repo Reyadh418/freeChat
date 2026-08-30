@@ -30,15 +30,15 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static frontend assets
+// Static assets
 const publicPath = path.join(__dirname, '../public');
 app.use(express.static(publicPath));
 
-// API Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 
-// Health check endpoint
+// Health
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -47,18 +47,18 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Fallback to index.html for SPA navigation
+// Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });
 
-// Realtime Presence & WebSockets Engine
-const onlineUsers = new Map(); // userId -> Set of socketIds
+// Realtime
+const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
   let authenticatedUserId = null;
 
-  // 1. User registers their online presence
+  // Presence
   socket.on('user_connected', (userId) => {
     if (!userId) return;
     authenticatedUserId = userId;
@@ -68,10 +68,8 @@ io.on('connection', (socket) => {
     }
     onlineUsers.get(userId).add(socket.id);
 
-    // Join user's personal notification room
     socket.join(`user:${userId}`);
 
-    // Broadcast online status
     io.emit('user_status_change', {
       userId,
       status: 'online',
@@ -79,7 +77,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 2. Join a specific conversation room
+  // Room
   socket.on('join_conversation', (conversationId) => {
     if (!conversationId) return;
     socket.join(`conv:${conversationId}`);
@@ -90,7 +88,7 @@ io.on('connection', (socket) => {
     socket.leave(`conv:${conversationId}`);
   });
 
-  // 3. Typing indicator relay
+  // Typing
   socket.on('typing_start', ({ conversationId, userId, username }) => {
     socket.to(`conv:${conversationId}`).emit('user_typing', {
       conversationId,
@@ -109,19 +107,18 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 4. Encrypted Message Relay & Persistence
+  // Messages
   socket.on('send_message', async (messageData, callback) => {
     try {
       const { conversationId, senderId, ciphertext, iv, senderPublicKey, mediaUrl, mediaType } = messageData;
 
       if (!conversationId || !senderId || !ciphertext || !iv) {
         if (typeof callback === 'function') {
-          callback({ error: 'Missing required encrypted message payload.' });
+          callback({ error: 'Missing payload.' });
         }
         return;
       }
 
-      // Persist encrypted message to DB (Ciphertext only)
       const savedMessage = await db.saveMessage({
         conversation_id: conversationId,
         sender_id: senderId,
@@ -132,10 +129,8 @@ io.on('connection', (socket) => {
         media_type: mediaType
       });
 
-      // Broadcast to all clients in conversation room
       io.to(`conv:${conversationId}`).emit('new_message', savedMessage);
 
-      // Also notify individual participants in case conversation isn't actively opened
       const participants = await db.getConversationParticipants(conversationId);
       participants?.forEach((p) => {
         const participantId = p.user_id || p.id;
@@ -151,14 +146,14 @@ io.on('connection', (socket) => {
         callback({ success: true, message: savedMessage });
       }
     } catch (err) {
-      console.error('[Socket Send Message Error]:', err);
+      console.error('[Socket Error]:', err);
       if (typeof callback === 'function') {
         callback({ error: 'Failed to send message.' });
       }
     }
   });
 
-  // 5. Handle Disconnect
+  // Disconnect
   socket.on('disconnect', async () => {
     if (authenticatedUserId && onlineUsers.has(authenticatedUserId)) {
       const userSockets = onlineUsers.get(authenticatedUserId);
@@ -180,10 +175,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(`🚀 freeChat Server running on http://localhost:${PORT}`);
-  console.log(`🔒 Zero-Knowledge End-to-End Encryption Enabled`);
-  console.log(`💾 Database: ${db.isSupabase ? 'Supabase PostgreSQL' : 'Local SQLite'}`);
-  console.log(`====================================================`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
-

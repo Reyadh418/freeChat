@@ -14,20 +14,20 @@
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/imessage.css">
   
-  <!-- PWA Manifest -->
+  <!-- PWA -->
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!-- Ambient Liquid Glass Mesh Wallpaper -->
+  <!-- Ambient background -->
   <div class="app-background-mesh"></div>
 
-  <!-- Toast Notification System (Dynamic Island Style) -->
+  <!-- Toasts -->
   <div id="toast-container"></div>
 
-  <!-- Main App Shell -->
+  <!-- App Shell -->
   <div class="app-container">
 
-    <!-- LEFT SIDEBAR: Messages & Inboxes -->
+    <!-- Sidebar -->
     <aside class="sidebar glass-sidebar">
       <header class="sidebar-header">
         <h1 class="sidebar-title">Messages</h1>
@@ -41,7 +41,7 @@
         </div>
       </header>
 
-      <!-- Search Bar -->
+      <!-- Search -->
       <div class="search-bar-container">
         <div class="search-pill">
           <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -49,12 +49,10 @@
         </div>
       </div>
 
-      <!-- Conversations Scrollable List -->
-      <div class="conversations-list" id="conversations-list">
-        <!-- Rendered dynamically by ui.js -->
-      </div>
+      <!-- Conversation list -->
+      <div class="conversations-list" id="conversations-list"></div>
 
-      <!-- User Profile & Security Badge Footer -->
+      <!-- User profile -->
       <footer class="sidebar-footer">
         <div class="user-profile-summary">
           <div class="avatar" id="sidebar-avatar" style="background-color: #007AFF;">?</div>
@@ -72,15 +70,15 @@
       </footer>
     </aside>
 
-    <!-- RIGHT CHAT PANE: iMessage Active Conversation -->
+    <!-- Chat pane -->
     <main class="chat-pane glass-panel" id="chat-pane">
 
-      <!-- Empty State View (Before selecting a chat) -->
+      <!-- Empty state -->
       <div class="empty-chat-state" id="empty-chat-state">
         <div class="empty-state-icon">
           <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
         </div>
-        <h2 style="font-size: 22px; font-weight: 700;">Zero-Knowledge iMessage</h2>
+        <h2 style="font-size: 22px; font-weight: 700;">Zero-Knowledge freeChat</h2>
         <p style="color: var(--text-secondary); max-width: 320px; font-size: 15px; line-height: 1.4;">
           Your messages are encrypted end-to-end directly in your browser with ECDH P-256 and AES-256-GCM.
         </p>
@@ -89,7 +87,7 @@
         </button>
       </div>
 
-      <!-- Active Conversation View -->
+      <!-- Active chat -->
       <div id="active-chat-view" style="display: none; flex-direction: column; width: 100%; height: 100%;">
         <!-- Header -->
         <header class="chat-header glass-header">
@@ -100,23 +98,21 @@
             <div class="avatar" id="chat-header-avatar" style="background-color: #007AFF;">?</div>
             <div class="chat-header-details">
               <span class="chat-header-name" id="chat-header-name">Recipient</span>
-              <span class="chat-header-subtitle" id="chat-header-subtitle">iMessage • End-to-End Encrypted 🔒</span>
+              <span class="chat-header-subtitle" id="chat-header-subtitle">freeChat • End-to-End Encrypted 🔒</span>
             </div>
           </div>
         </header>
 
-        <!-- Messages Flow -->
-        <div class="messages-container" id="messages-container">
-          <!-- Rendered dynamically by ui.js -->
-        </div>
+        <!-- Messages -->
+        <div class="messages-container" id="messages-container"></div>
 
-        <!-- Composer Capsule -->
+        <!-- Composer -->
         <footer class="chat-composer glass-composer">
           <div class="composer-pill">
             <textarea 
               id="composer-input" 
               class="composer-input" 
-              placeholder="iMessage" 
+              placeholder="freeChat" 
               rows="1"
             ></textarea>
             <button id="send-btn" class="btn-send" title="Send Message">
@@ -130,7 +126,7 @@
 
   </div>
 
-  <!-- AUTHENTICATION MODAL (Liquid Glass Card) -->
+  <!-- Auth modal -->
   <div class="modal-overlay" id="auth-modal">
     <div class="glass-card auth-card">
       <div class="auth-header">
@@ -167,7 +163,7 @@
     </div>
   </div>
 
-  <!-- NEW CHAT USER SEARCH MODAL -->
+  <!-- Search modal -->
   <div class="modal-overlay" id="new-chat-modal">
     <div class="glass-card" style="width: 90%; max-width: 420px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
       <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -182,25 +178,21 @@
         <input type="text" id="user-search-input" placeholder="Type username..." autocomplete="off">
       </div>
 
-      <div class="search-results-list" id="search-results-list">
-        <!-- Live search results rendered here -->
-      </div>
+      <div class="search-results-list" id="search-results-list"></div>
     </div>
   </div>
 
-  <!-- Socket.io client script -->
+  <!-- Scripts -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Application Entry -->
   <script type="module" src="js/app.js"></script>
 
-  <!-- PWA Service Worker Registration -->
+  <!-- Service worker -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration error:', err));
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW error:', err));
       });
     }
   </script>
 </body>
 </html>
-

@@ -1,8 +1,4 @@
-/**
- * freeChat: REST API Client
- */
-
-const BASE_URL = ''; // Relative path for single-origin or configured proxy
+const BASE_URL = '';
 
 async function request(endpoint, options = {}) {
   const defaultHeaders = {
@@ -28,7 +24,7 @@ async function request(endpoint, options = {}) {
 }
 
 export const API = {
-  // Auth endpoints
+  // Auth
   async register(userData) {
     return request('/api/auth/register', {
       method: 'POST',
@@ -54,7 +50,7 @@ export const API = {
     return request(`/api/auth/user/${encodeURIComponent(username)}`);
   },
 
-  // Chat endpoints
+  // Chat
   async searchUsers(query, excludeUserId) {
     const params = new URLSearchParams({ q: query });
     if (excludeUserId) params.append('exclude', excludeUserId);
@@ -76,4 +72,3 @@ export const API = {
     return request(`/api/chat/conversations/${encodeURIComponent(convId)}/messages?limit=${limit}`);
   }
 };
-

@@ -1,7 +1,3 @@
-/**
- * freeChat: Application State & Coordinator
- */
-
 import {
   generateKeyPair,
   exportPublicKey,
@@ -28,20 +24,20 @@ import {
   escapeHtml
 } from './ui.js';
 
-// Global App State
+// State
 const state = {
-  currentUser: null,           // { id, username, public_key, avatar_color }
-  localPrivateKey: null,       // CryptoKey
-  localPublicKey: null,        // CryptoKey
-  conversations: [],           // Array of conversation objects
-  activeConversation: null,    // Currently selected conversation object
-  activeTargetUser: null,      // { id, username, public_key, avatar_color }
-  activeSharedKey: null,       // Derived AES-GCM 256 CryptoKey for active chat
+  currentUser: null,
+  localPrivateKey: null,
+  localPublicKey: null,
+  conversations: [],
+  activeConversation: null,
+  activeTargetUser: null,
+  activeSharedKey: null,
   isTypingTimer: null,
   isTyping: false
 };
 
-// DOM Elements Cache
+// Elements
 const elements = {
   themeToggleBtn: document.getElementById('theme-toggle-btn'),
   newChatBtn: document.getElementById('new-chat-btn'),
@@ -50,7 +46,7 @@ const elements = {
   sidebarAvatar: document.getElementById('sidebar-avatar'),
   logoutBtn: document.getElementById('logout-btn'),
 
-  // Chat Pane
+  // Chat pane
   chatPane: document.getElementById('chat-pane'),
   emptyChatState: document.getElementById('empty-chat-state'),
   activeChatView: document.getElementById('active-chat-view'),
@@ -62,7 +58,7 @@ const elements = {
   sendBtn: document.getElementById('send-btn'),
   btnBack: document.getElementById('btn-back'),
 
-  // Auth Modal
+  // Auth modal
   authModal: document.getElementById('auth-modal'),
   authForm: document.getElementById('auth-form'),
   authTitle: document.getElementById('auth-title'),
@@ -74,18 +70,16 @@ const elements = {
   tabLogin: document.getElementById('tab-login'),
   tabRegister: document.getElementById('tab-register'),
 
-  // New Chat Modal
+  // Search modal
   newChatModal: document.getElementById('new-chat-modal'),
   closeNewChatBtn: document.getElementById('close-new-chat-btn'),
   userSearchInput: document.getElementById('user-search-input'),
   searchResultsList: document.getElementById('search-results-list')
 };
 
-let currentAuthMode = 'login'; // 'login' or 'register'
+let currentAuthMode = 'login';
 
-/**
- * 1. Initialize Application
- */
+// Initialize
 async function initApp() {
   initTheme();
   setupEventListeners();
@@ -104,16 +98,14 @@ async function initApp() {
         return;
       }
     } catch (err) {
-      console.warn('[Init] Stored session invalid:', err);
+      console.warn('[Init] Session invalid:', err);
     }
   }
 
   showAuthModal('login');
 }
 
-/**
- * 2. Theme Manager (iOS Liquid Glass Dark/Light)
- */
+// Theme
 function initTheme() {
   const savedTheme = localStorage.getItem('freeChat_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
@@ -135,9 +127,7 @@ function updateThemeIcon(theme) {
     : `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>`;
 }
 
-/**
- * 3. Auth & Cryptographic Registration / Login
- */
+// Auth modal
 function showAuthModal(mode = 'login') {
   currentAuthMode = mode;
   elements.authModal.classList.add('active');
@@ -181,20 +171,19 @@ async function handleAuthSubmit(e) {
       const keyPair = await generateKeyPair();
       const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
 
-      elements.authCryptoStatus.textContent = '🛡️ Deriving Master PBKDF2 Key...';
+      elements.authCryptoStatus.textContent = '🛡️ Deriving Master Key...';
       const salt = generateRandomBytes(16);
       const saltBase64 = arrayBufferToBase64(salt);
       const masterKey = await deriveMasterKey(password, salt);
       const authVerifier = await deriveAuthVerifier(password, saltBase64);
 
-      elements.authCryptoStatus.textContent = '🔒 Encrypting Private Key Backup...';
+      elements.authCryptoStatus.textContent = '🔒 Encrypting Key Backup...';
       const encryptedBackup = await encryptPrivateKeyBackup(keyPair.privateKey, masterKey);
 
-      // Select a vibrant avatar color
       const colors = ['#007AFF', '#FF2D55', '#5856D6', '#AF52DE', '#FF9500', '#34C759'];
       const avatarColor = colors[Math.floor(Math.random() * colors.length)];
 
-      elements.authCryptoStatus.textContent = '☁️ Creating Account in Database...';
+      elements.authCryptoStatus.textContent = '☁️ Creating Account...';
       const res = await API.register({
         username,
         auth_verifier: authVerifier,
@@ -205,7 +194,6 @@ async function handleAuthSubmit(e) {
         avatar_color: avatarColor
       });
 
-      // Save keys locally in browser IndexedDB
       await KeyStore.saveUserKeys(res.user.id, keyPair.privateKey, keyPair.publicKey);
 
       state.currentUser = res.user;
@@ -217,7 +205,7 @@ async function handleAuthSubmit(e) {
       onAuthSuccess();
       showToast(`Welcome @${username}! Keys generated safely.`);
     } else {
-      elements.authCryptoStatus.textContent = '🔍 Fetching cryptographic parameters...';
+      elements.authCryptoStatus.textContent = '🔍 Fetching parameters...';
       const preLogin = await API.preLogin(username);
 
       elements.authCryptoStatus.textContent = '🛡️ Deriving Key & Verifier...';
@@ -225,7 +213,7 @@ async function handleAuthSubmit(e) {
       const masterKey = await deriveMasterKey(password, saltBuffer);
       const authVerifier = await deriveAuthVerifier(password, preLogin.salt);
 
-      elements.authCryptoStatus.textContent = '🔓 Decrypting Private Key locally...';
+      elements.authCryptoStatus.textContent = '🔓 Decrypting Private Key...';
       const privateKey = await decryptPrivateKeyBackup(
         preLogin.encrypted_priv_key,
         preLogin.iv,
@@ -233,9 +221,7 @@ async function handleAuthSubmit(e) {
       );
 
       const loginRes = await API.login(username, authVerifier);
-      
-      // Save recovered keys to local IndexedDB
-      const pubKey = await generateKeyPair(); // Temporary container
+      const pubKey = await generateKeyPair();
       await KeyStore.saveUserKeys(loginRes.user.id, privateKey, pubKey.publicKey);
 
       state.currentUser = loginRes.user;
@@ -247,7 +233,7 @@ async function handleAuthSubmit(e) {
       showToast(`Welcome back, @${username}!`);
     }
   } catch (err) {
-    console.error('[Auth Failed]:', err);
+    console.error('[Auth Error]:', err);
     elements.authCryptoStatus.textContent = '❌ Authentication failed';
     showToast(err.message || 'Authentication error');
   } finally {
@@ -271,15 +257,12 @@ function handleLogout() {
   }
 }
 
-/**
- * 4. Post-Auth Handlers
- */
+// Post-auth
 async function onAuthSuccess() {
   elements.sidebarUsername.textContent = `@${state.currentUser.username}`;
   elements.sidebarAvatar.textContent = (state.currentUser.username || '?')[0].toUpperCase();
   elements.sidebarAvatar.style.backgroundColor = state.currentUser.avatar_color || '#007AFF';
 
-  // Connect Realtime WebSockets
   Realtime.connect({
     userId: state.currentUser.id,
     onMessageReceived: handleIncomingMessage,
@@ -291,16 +274,14 @@ async function onAuthSuccess() {
   await loadConversations();
 }
 
-/**
- * 5. Conversations & Messaging
- */
+// Conversations
 async function loadConversations() {
   try {
     const convs = await API.getConversations(state.currentUser.id);
     state.conversations = convs;
     renderConversationsList();
   } catch (err) {
-    console.error('[Load Conversations Error]:', err);
+    console.error('[Conversations Error]:', err);
   }
 }
 
@@ -325,9 +306,18 @@ function renderConversationsList() {
 }
 
 async function selectConversation(conv) {
-  if (state.activeConversation?.id === conv.id) return;
+  const isAlreadyActive = state.activeConversation?.id === conv.id;
 
-  // Leave previous conversation room
+  // Reactivate view
+  if (isAlreadyActive) {
+    document.body.classList.add('chat-active');
+    elements.emptyChatState.style.display = 'none';
+    elements.activeChatView.style.display = 'flex';
+    elements.composerInput.focus();
+    return;
+  }
+
+  // Leave previous room
   if (state.activeConversation) {
     Realtime.leaveConversation(state.activeConversation.id);
   }
@@ -335,14 +325,14 @@ async function selectConversation(conv) {
   state.activeConversation = conv;
   Realtime.joinConversation(conv.id);
 
-  // Identify Target User
+  // Target user
   const otherParticipant = conv.conversation_participants?.find(
     p => (p.user_id || p.users?.id) !== state.currentUser.id
   )?.users;
 
   state.activeTargetUser = otherParticipant;
 
-  // Derive Shared Secret Key via ECDH (P-256)
+  // Key exchange
   try {
     state.activeSharedKey = await getSharedSecretKey(
       state.localPrivateKey,
@@ -351,7 +341,7 @@ async function selectConversation(conv) {
     );
   } catch (err) {
     console.error('[Key Exchange Error]:', err);
-    showToast('Failed to establish E2EE key exchange with peer.');
+    showToast('Failed to establish E2EE key exchange.');
   }
 
   // Update UI
@@ -363,7 +353,7 @@ async function selectConversation(conv) {
   elements.chatHeaderName.textContent = targetName;
   elements.chatHeaderAvatar.textContent = targetName[0].toUpperCase();
   elements.chatHeaderAvatar.style.backgroundColor = otherParticipant?.avatar_color || '#007AFF';
-  elements.chatHeaderSubtitle.innerHTML = `<svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg> iMessage • End-to-End Encrypted`;
+  elements.chatHeaderSubtitle.innerHTML = `<svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg> freeChat • End-to-End Encrypted`;
 
   renderConversationsList();
   await loadMessages(conv.id);
@@ -399,10 +389,11 @@ async function loadMessages(convId) {
 
     scrollToBottom(elements.messagesContainer, false);
   } catch (err) {
-    console.error('[Load Messages Error]:', err);
+    console.error('[Messages Error]:', err);
   }
 }
 
+// Send message
 async function handleSendMessage() {
   const text = elements.composerInput.value.trim();
   if (!text || !state.activeConversation || !state.activeSharedKey) return;
@@ -411,10 +402,8 @@ async function handleSendMessage() {
   updateSendButtonState();
 
   try {
-    // Encrypt Message Client-Side with AES-256-GCM
     const { ciphertext, iv } = await encryptMessage(text, state.activeSharedKey);
 
-    // Send encrypted payload over Socket.io
     const savedMsg = await Realtime.sendMessage({
       conversationId: state.activeConversation.id,
       senderId: state.currentUser.id,
@@ -422,7 +411,6 @@ async function handleSendMessage() {
       iv
     });
 
-    // Append to UI immediately
     const bubble = renderMessageBubble({
       id: savedMsg.id,
       isMine: true,
@@ -432,20 +420,19 @@ async function handleSendMessage() {
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
 
-    // Stop typing indicator
     Realtime.sendTypingStop(
       state.activeConversation.id,
       state.currentUser.id,
       state.currentUser.username
     );
   } catch (err) {
-    console.error('[Send Message Error]:', err);
+    console.error('[Send Error]:', err);
     showToast('Failed to send encrypted message.');
   }
 }
 
+// Receive message
 async function handleIncomingMessage(msg) {
-  // If message belongs to active conversation, decrypt and render
   if (state.activeConversation && msg.conversation_id === state.activeConversation.id) {
     if (msg.sender_id !== state.currentUser.id) {
       let plainText = '🔒 [Encrypted Message]';
@@ -453,7 +440,6 @@ async function handleIncomingMessage(msg) {
         plainText = await decryptMessage(msg.ciphertext, msg.iv, state.activeSharedKey);
       }
 
-      // Remove typing bubble if present
       const existingTyping = document.getElementById('active-typing-indicator');
       if (existingTyping) existingTyping.remove();
 
@@ -468,13 +454,10 @@ async function handleIncomingMessage(msg) {
     }
   }
 
-  // Update conversation list preview
   loadConversations();
 }
 
-/**
- * 6. Typing Indicators
- */
+// Typing indicators
 function handleTypingInput() {
   updateSendButtonState();
 
@@ -534,9 +517,7 @@ function updateSendButtonState() {
   }
 }
 
-/**
- * 7. User Search & New Chat Modal
- */
+// User search
 function openNewChatModal() {
   elements.newChatModal.classList.add('active');
   elements.userSearchInput.value = '';
@@ -604,30 +585,24 @@ async function startDirectChatWith(targetUsername) {
     await loadConversations();
     selectConversation(conv);
   } catch (err) {
-    console.error('[Start Chat Error]:', err);
+    console.error('[Chat Error]:', err);
     showToast(err.message || 'Failed to start conversation.');
   }
 }
 
-/**
- * 8. Setup Global Listeners
- */
+// Event listeners
 function setupEventListeners() {
-  // Theme toggle
   elements.themeToggleBtn.addEventListener('click', toggleTheme);
 
-  // Auth Tabs
   elements.tabLogin.addEventListener('click', () => showAuthModal('login'));
   elements.tabRegister.addEventListener('click', () => showAuthModal('register'));
   elements.authForm.addEventListener('submit', handleAuthSubmit);
   elements.logoutBtn.addEventListener('click', handleLogout);
 
-  // New Chat Modal
   elements.newChatBtn.addEventListener('click', openNewChatModal);
   elements.closeNewChatBtn.addEventListener('click', closeNewChatModal);
   elements.userSearchInput.addEventListener('input', handleUserSearch);
 
-  // Composer
   elements.composerInput.addEventListener('input', handleTypingInput);
   elements.composerInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -637,12 +612,10 @@ function setupEventListeners() {
   });
   elements.sendBtn.addEventListener('click', handleSendMessage);
 
-  // Mobile Back Button
   elements.btnBack.addEventListener('click', () => {
     document.body.classList.remove('chat-active');
   });
 }
 
-// Kick off application on DOM load
+// Init
 window.addEventListener('DOMContentLoaded', initApp);
-
