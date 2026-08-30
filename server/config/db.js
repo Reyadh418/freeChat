@@ -263,12 +263,20 @@ export const db = {
         .from('conversations')
         .select(`
           id, type, title, created_at, updated_at,
-          conversation_participants(user_id, role, users(id, username, public_key, avatar_color, status_message, last_seen))
+          conversation_participants(user_id, role, users(id, username, public_key, avatar_color, status_message, last_seen)),
+          messages(id, sender_id, ciphertext, iv, created_at)
         `)
         .in('id', convIds)
         .order('updated_at', { ascending: false });
       if (convError) throw convError;
-      return convs || [];
+      return (convs || []).map(c => {
+        const msgs = c.messages || [];
+        const sorted = msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        return {
+          ...c,
+          last_message: sorted[sorted.length - 1] || null
+        };
+      });
     } else {
       const data = loadLocalData();
       const myConvIds = data.conversation_participants
@@ -297,8 +305,14 @@ export const db = {
           };
         });
 
+        const convMessages = data.messages
+          .filter(m => m.conversation_id === conv.id)
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const lastMsg = convMessages.length > 0 ? convMessages[convMessages.length - 1] : null;
+
         return {
           ...conv,
+          last_message: lastMsg,
           conversation_participants: hydratedParticipants
         };
       });

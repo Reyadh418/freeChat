@@ -610,6 +610,7 @@
     width: 100vw;
     height: 100vh;
     position: relative;
+    overflow: hidden;
   }
 
   .sidebar {
@@ -617,7 +618,9 @@
     position: absolute;
     inset: 0;
     z-index: 20;
+    transform: translateX(0);
     transition: transform var(--duration-normal) var(--spring-smooth);
+    pointer-events: auto;
   }
 
   .chat-pane {
@@ -627,14 +630,19 @@
     z-index: 30;
     transform: translateX(100%);
     transition: transform var(--duration-normal) var(--spring-smooth);
+    pointer-events: none;
+    visibility: hidden;
   }
 
   body.chat-active .sidebar {
     transform: translateX(-25%);
+    pointer-events: none;
   }
 
   body.chat-active .chat-pane {
     transform: translateX(0);
+    pointer-events: auto;
+    visibility: visible;
   }
 
   .btn-back {

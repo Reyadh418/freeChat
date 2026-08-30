@@ -300,20 +300,47 @@ function renderConversationsList() {
   state.conversations.forEach(conv => {
     const isActive = state.activeConversation?.id === conv.id;
     const item = renderConversationItem(conv, state.currentUser.id, isActive);
-    item.addEventListener('click', () => selectConversation(conv));
+    
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      selectConversation(conv);
+    });
+
     elements.conversationsList.appendChild(item);
+
+    // Decrypt last message snippet
+    if (conv.last_message && state.localPrivateKey) {
+      const otherParticipant = conv.conversation_participants?.find(
+        p => (p.user_id || p.users?.id) !== state.currentUser.id
+      )?.users;
+
+      if (otherParticipant?.public_key) {
+        getSharedSecretKey(state.localPrivateKey, otherParticipant.public_key, otherParticipant.id)
+          .then(sharedKey => decryptMessage(conv.last_message.ciphertext, conv.last_message.iv, sharedKey))
+          .then(plain => {
+            const previewEl = document.getElementById(`conv-preview-${conv.id}`);
+            if (previewEl && plain && !plain.startsWith('🔒')) {
+              const prefix = conv.last_message.sender_id === state.currentUser.id ? 'You: ' : '';
+              previewEl.textContent = `${prefix}${plain}`;
+            }
+          })
+          .catch(() => {});
+      }
+    }
   });
 }
 
 async function selectConversation(conv) {
+  // Always bring UI into view immediately
+  document.body.classList.add('chat-active');
+  elements.emptyChatState.style.display = 'none';
+  elements.activeChatView.style.display = 'flex';
+
   const isAlreadyActive = state.activeConversation?.id === conv.id;
 
-  // Reactivate view
   if (isAlreadyActive) {
-    document.body.classList.add('chat-active');
-    elements.emptyChatState.style.display = 'none';
-    elements.activeChatView.style.display = 'flex';
     elements.composerInput.focus();
+    scrollToBottom(elements.messagesContainer, true);
     return;
   }
 
@@ -334,20 +361,17 @@ async function selectConversation(conv) {
 
   // Key exchange
   try {
-    state.activeSharedKey = await getSharedSecretKey(
-      state.localPrivateKey,
-      otherParticipant.public_key,
-      otherParticipant.id
-    );
+    if (otherParticipant?.public_key) {
+      state.activeSharedKey = await getSharedSecretKey(
+        state.localPrivateKey,
+        otherParticipant.public_key,
+        otherParticipant.id
+      );
+    }
   } catch (err) {
     console.error('[Key Exchange Error]:', err);
     showToast('Failed to establish E2EE key exchange.');
   }
-
-  // Update UI
-  document.body.classList.add('chat-active');
-  elements.emptyChatState.style.display = 'none';
-  elements.activeChatView.style.display = 'flex';
 
   const targetName = otherParticipant?.username || 'Chat';
   elements.chatHeaderName.textContent = targetName;
