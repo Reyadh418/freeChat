@@ -323,7 +323,7 @@ export const db = {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase
         .from('conversation_participants')
-        .select('user_id, role, users(id, username, public_key, avatar_color, last_seen)')
+        .select('user_id, role, users(id, username, public_key, avatar_color, status_message, last_seen)')
         .eq('conversation_id', convId);
       if (error) throw error;
       return data || [];

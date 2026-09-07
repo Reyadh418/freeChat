@@ -35,8 +35,8 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Pass socket.io and API requests directly to network
-  if (e.request.url.includes('/socket.io/') || e.request.url.includes('/api/')) {
+  // Only cache GET requests, pass socket.io and API requests directly to network
+  if (e.request.method !== 'GET' || e.request.url.includes('/socket.io/') || e.request.url.includes('/api/')) {
     return;
   }
 

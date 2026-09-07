@@ -1,4 +1,5 @@
 let socket = null;
+let currentActiveConversationId = null;
 
 export const Realtime = {
   connect({
@@ -6,6 +7,7 @@ export const Realtime = {
     onMessageReceived,
     onTypingChange,
     onStatusChange,
+    onOnlineUsersList,
     onConversationUpdated
   }) {
     if (socket) {
@@ -17,6 +19,15 @@ export const Realtime = {
 
     socket.on('connect', () => {
       socket.emit('user_connected', userId);
+      if (currentActiveConversationId) {
+        socket.emit('join_conversation', currentActiveConversationId);
+      }
+    });
+
+    socket.on('online_users_list', (userIds) => {
+      if (typeof onOnlineUsersList === 'function') {
+        onOnlineUsersList(userIds);
+      }
     });
 
     socket.on('new_message', (msg) => {
@@ -47,12 +58,16 @@ export const Realtime = {
   },
 
   joinConversation(conversationId) {
+    currentActiveConversationId = conversationId;
     if (socket && conversationId) {
       socket.emit('join_conversation', conversationId);
     }
   },
 
   leaveConversation(conversationId) {
+    if (currentActiveConversationId === conversationId) {
+      currentActiveConversationId = null;
+    }
     if (socket && conversationId) {
       socket.emit('leave_conversation', conversationId);
     }

@@ -47,14 +47,22 @@ export function showToast(message, duration = 3000) {
   }, duration);
 }
 
-export function renderConversationItem(conv, currentUserId, isActive = false) {
+export function renderDateDivider(text) {
+  const div = document.createElement('div');
+  div.className = 'date-divider';
+  div.textContent = text;
+  return div;
+}
+
+export function renderConversationItem(conv, currentUserId, isActive = false, onlineUsers = new Set()) {
   const otherParticipant = conv.conversation_participants?.find(
     p => (p.user_id || p.users?.id) !== currentUserId
   )?.users || { username: conv.title || 'Unknown', avatar_color: '#007AFF' };
 
-  const initial = (otherParticipant.username || '?')[0].toUpperCase();
-  const color = otherParticipant.avatar_color || '#007AFF';
-  const isOnline = otherParticipant.status === 'online';
+  const initial = escapeHtml((otherParticipant.username || '?')[0].toUpperCase());
+  const rawColor = otherParticipant.avatar_color || '#007AFF';
+  const color = /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : '#007AFF';
+  const isOnline = otherParticipant.id && onlineUsers ? onlineUsers.has(otherParticipant.id) : false;
 
   const div = document.createElement('div');
   div.className = `conv-item ${isActive ? 'active' : ''}`;
@@ -65,7 +73,7 @@ export function renderConversationItem(conv, currentUserId, isActive = false) {
   div.innerHTML = `
     <div class="avatar" style="background-color: ${color}">
       ${initial}
-      <div class="avatar-status-badge ${isOnline ? '' : 'offline'}" id="status-badge-${otherParticipant.id}"></div>
+      <div class="avatar-status-badge ${isOnline ? '' : 'offline'}" id="status-badge-${otherParticipant.id || conv.id}"></div>
     </div>
     <div class="conv-item-content">
       <div class="conv-item-top">

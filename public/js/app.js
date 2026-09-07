@@ -1,6 +1,7 @@
 import {
   generateKeyPair,
   exportPublicKey,
+  importPublicKey,
   deriveMasterKey,
   deriveAuthVerifier,
   encryptPrivateKeyBackup,
@@ -10,6 +11,8 @@ import {
   decryptMessage,
   generateRandomBytes,
   arrayBufferToBase64,
+  base64ToArrayBuffer,
+  clearSharedKeyCache,
   KeyStore
 } from './crypto.js';
 
@@ -20,6 +23,8 @@ import {
   renderConversationItem,
   renderMessageBubble,
   renderTypingIndicator,
+  renderDateDivider,
+  formatDateDivider,
   scrollToBottom,
   escapeHtml
 } from './ui.js';
@@ -33,6 +38,8 @@ const state = {
   activeConversation: null,
   activeTargetUser: null,
   activeSharedKey: null,
+  onlineUsers: new Set(),
+  searchQuery: '',
   isTypingTimer: null,
   isTyping: false
 };
@@ -41,6 +48,7 @@ const state = {
 const elements = {
   themeToggleBtn: document.getElementById('theme-toggle-btn'),
   newChatBtn: document.getElementById('new-chat-btn'),
+  searchConvInput: document.getElementById('search-conv-input'),
   conversationsList: document.getElementById('conversations-list'),
   sidebarUsername: document.getElementById('sidebar-username'),
   sidebarAvatar: document.getElementById('sidebar-avatar'),
@@ -146,6 +154,7 @@ function showAuthModal(mode = 'login') {
     elements.authSubtitle.textContent = 'Generate your local E2EE keys';
     elements.authSubmitBtn.textContent = 'Create Account & Keys';
   }
+  elements.authUsernameInput.focus();
 }
 
 function hideAuthModal() {
@@ -209,7 +218,7 @@ async function handleAuthSubmit(e) {
       const preLogin = await API.preLogin(username);
 
       elements.authCryptoStatus.textContent = '🛡️ Deriving Key & Verifier...';
-      const saltBuffer = new Uint8Array(arrayBufferToBase64(preLogin.salt) ? new TextEncoder().encode(preLogin.salt) : 16);
+      const saltBuffer = base64ToArrayBuffer(preLogin.salt);
       const masterKey = await deriveMasterKey(password, saltBuffer);
       const authVerifier = await deriveAuthVerifier(password, preLogin.salt);
 
@@ -221,11 +230,12 @@ async function handleAuthSubmit(e) {
       );
 
       const loginRes = await API.login(username, authVerifier);
-      const pubKey = await generateKeyPair();
-      await KeyStore.saveUserKeys(loginRes.user.id, privateKey, pubKey.publicKey);
+      const publicKey = await importPublicKey(loginRes.user.public_key);
+      await KeyStore.saveUserKeys(loginRes.user.id, privateKey, publicKey);
 
       state.currentUser = loginRes.user;
       state.localPrivateKey = privateKey;
+      state.localPublicKey = publicKey;
 
       localStorage.setItem('freeChat_user', JSON.stringify(loginRes.user));
       hideAuthModal();
@@ -246,13 +256,16 @@ function handleLogout() {
     if (state.currentUser) {
       KeyStore.clearUserKeys(state.currentUser.id);
     }
+    clearSharedKeyCache();
     localStorage.removeItem('freeChat_user');
     Realtime.disconnect();
     state.currentUser = null;
     state.localPrivateKey = null;
+    state.localPublicKey = null;
     state.activeConversation = null;
     state.activeTargetUser = null;
     state.activeSharedKey = null;
+    state.onlineUsers.clear();
     location.reload();
   }
 }
@@ -265,6 +278,11 @@ async function onAuthSuccess() {
 
   Realtime.connect({
     userId: state.currentUser.id,
+    onOnlineUsersList: (userIds) => {
+      state.onlineUsers = new Set(userIds);
+      renderConversationsList();
+      updateChatHeaderPresence();
+    },
     onMessageReceived: handleIncomingMessage,
     onTypingChange: handleTypingChange,
     onStatusChange: handleUserStatusChange,
@@ -288,18 +306,26 @@ async function loadConversations() {
 function renderConversationsList() {
   elements.conversationsList.innerHTML = '';
 
-  if (state.conversations.length === 0) {
+  const q = state.searchQuery.toLowerCase().trim();
+  const filteredConvs = q ? state.conversations.filter(c => {
+    const otherParticipant = c.conversation_participants?.find(
+      p => (p.user_id || p.users?.id) !== state.currentUser.id
+    )?.users;
+    return otherParticipant?.username?.toLowerCase().includes(q) || c.title?.toLowerCase().includes(q);
+  }) : state.conversations;
+
+  if (filteredConvs.length === 0) {
     elements.conversationsList.innerHTML = `
       <div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 14px;">
-        No conversations yet.<br>Click <strong>+</strong> to start an E2EE chat!
+        ${q ? `No conversations matching "${escapeHtml(q)}"` : 'No conversations yet.<br>Click <strong>+</strong> to start an E2EE chat!'}
       </div>
     `;
     return;
   }
 
-  state.conversations.forEach(conv => {
+  filteredConvs.forEach(conv => {
     const isActive = state.activeConversation?.id === conv.id;
-    const item = renderConversationItem(conv, state.currentUser.id, isActive);
+    const item = renderConversationItem(conv, state.currentUser.id, isActive, state.onlineUsers);
     
     item.addEventListener('click', (e) => {
       e.preventDefault();
@@ -328,6 +354,14 @@ function renderConversationsList() {
       }
     }
   });
+}
+
+function updateChatHeaderPresence() {
+  if (!state.activeTargetUser) return;
+  const isOnline = state.onlineUsers.has(state.activeTargetUser.id);
+  elements.chatHeaderSubtitle.innerHTML = isOnline
+    ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--status-online); margin-right:4px;"></span> Online • E2EE 🔒`
+    : `<svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg> freeChat • End-to-End Encrypted`;
 }
 
 async function selectConversation(conv) {
@@ -377,7 +411,7 @@ async function selectConversation(conv) {
   elements.chatHeaderName.textContent = targetName;
   elements.chatHeaderAvatar.textContent = targetName[0].toUpperCase();
   elements.chatHeaderAvatar.style.backgroundColor = otherParticipant?.avatar_color || '#007AFF';
-  elements.chatHeaderSubtitle.innerHTML = `<svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg> freeChat • End-to-End Encrypted`;
+  updateChatHeaderPresence();
 
   renderConversationsList();
   await loadMessages(conv.id);
@@ -387,14 +421,21 @@ async function selectConversation(conv) {
 async function loadMessages(convId) {
   elements.messagesContainer.innerHTML = `
     <div style="text-align:center; padding: 20px; color: var(--text-secondary); font-size: 13px;">
-      🔒 Messages and calls are end-to-end encrypted. No one outside of this chat can read them.
+      🔒 Messages are end-to-end encrypted. No one outside of this chat can read them.
     </div>
   `;
 
   try {
     const messages = await API.getMessages(convId);
-    
+    let lastDateStr = null;
+
     for (const msg of messages) {
+      const msgDate = new Date(msg.created_at).toDateString();
+      if (msgDate !== lastDateStr) {
+        lastDateStr = msgDate;
+        elements.messagesContainer.appendChild(renderDateDivider(formatDateDivider(msg.created_at)));
+      }
+
       const isMine = msg.sender_id === state.currentUser.id;
       let plainText = '🔒 [Encrypted Message]';
 
@@ -423,6 +464,7 @@ async function handleSendMessage() {
   if (!text || !state.activeConversation || !state.activeSharedKey) return;
 
   elements.composerInput.value = '';
+  elements.composerInput.style.height = 'auto';
   updateSendButtonState();
 
   try {
@@ -443,6 +485,12 @@ async function handleSendMessage() {
     });
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
+
+    // Update conversation in sidebar
+    state.activeConversation.last_message = savedMsg;
+    state.activeConversation.updated_at = savedMsg.created_at;
+    state.conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+    renderConversationsList();
 
     Realtime.sendTypingStop(
       state.activeConversation.id,
@@ -483,6 +531,10 @@ async function handleIncomingMessage(msg) {
 
 // Typing indicators
 function handleTypingInput() {
+  // Auto-resize composer textarea
+  elements.composerInput.style.height = 'auto';
+  elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+
   updateSendButtonState();
 
   if (!state.activeConversation) return;
@@ -522,6 +574,12 @@ function handleTypingChange({ conversationId, username, isTyping }) {
 }
 
 function handleUserStatusChange({ userId, status }) {
+  if (status === 'online') {
+    state.onlineUsers.add(userId);
+  } else {
+    state.onlineUsers.delete(userId);
+  }
+
   const badge = document.getElementById(`status-badge-${userId}`);
   if (badge) {
     if (status === 'online') {
@@ -530,6 +588,8 @@ function handleUserStatusChange({ userId, status }) {
       badge.classList.add('offline');
     }
   }
+
+  updateChatHeaderPresence();
 }
 
 function updateSendButtonState() {
@@ -580,10 +640,14 @@ async function handleUserSearch() {
       results.forEach(user => {
         const item = document.createElement('div');
         item.className = 'search-result-item';
+        const initial = escapeHtml((user.username || '?')[0].toUpperCase());
+        const rawColor = user.avatar_color || '#007AFF';
+        const avatarColor = /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : '#007AFF';
+
         item.innerHTML = `
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div class="avatar" style="background-color: ${user.avatar_color || '#007AFF'}; width: 36px; height: 36px; font-size: 14px;">
-              ${(user.username || '?')[0].toUpperCase()}
+            <div class="avatar" style="background-color: ${avatarColor}; width: 36px; height: 36px; font-size: 14px;">
+              ${initial}
             </div>
             <div>
               <div style="font-weight: 600; font-size: 15px;">@${escapeHtml(user.username)}</div>
@@ -626,6 +690,29 @@ function setupEventListeners() {
   elements.newChatBtn.addEventListener('click', openNewChatModal);
   elements.closeNewChatBtn.addEventListener('click', closeNewChatModal);
   elements.userSearchInput.addEventListener('input', handleUserSearch);
+
+  if (elements.searchConvInput) {
+    elements.searchConvInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value;
+      renderConversationsList();
+    });
+  }
+
+  // Backdrop click modal close
+  elements.newChatModal.addEventListener('click', (e) => {
+    if (e.target === elements.newChatModal) {
+      closeNewChatModal();
+    }
+  });
+
+  // Escape key to close modals
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (elements.newChatModal.classList.contains('active')) {
+        closeNewChatModal();
+      }
+    }
+  });
 
   elements.composerInput.addEventListener('input', handleTypingInput);
   elements.composerInput.addEventListener('keydown', (e) => {

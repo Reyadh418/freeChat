@@ -69,6 +69,8 @@ io.on('connection', (socket) => {
     onlineUsers.get(userId).add(socket.id);
 
     socket.join(`user:${userId}`);
+    // Send current online users list to this user
+    socket.emit('online_users_list', Array.from(onlineUsers.keys()));
 
     io.emit('user_status_change', {
       userId,

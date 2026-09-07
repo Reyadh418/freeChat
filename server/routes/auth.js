@@ -13,8 +13,8 @@ router.post('/register', async (req, res) => {
     }
 
     const cleanUsername = username.trim().toLowerCase();
-    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
-      return res.status(400).json({ error: 'Username must be between 3 and 30 characters.' });
+    if (!/^[a-z0-9_.-]{3,30}$/.test(cleanUsername)) {
+      return res.status(400).json({ error: 'Username must be 3-30 characters long and contain only letters, numbers, underscores, dashes, or dots.' });
     }
 
     const existingUser = await db.getUserByUsername(cleanUsername);

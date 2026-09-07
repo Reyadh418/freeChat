@@ -3,6 +3,18 @@ const subtle = webcrypto.subtle;
 
 console.log('🧪 Starting freeChat Automated Verification Suite...\n');
 
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return Buffer.from(binary, 'binary').toString('base64');
+}
+
+function base64ToArrayBuffer(base64) {
+  const buf = Buffer.from(base64, 'base64');
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+}
+
 // 1. Web Crypto API E2EE Test (Simulating Alice & Bob key exchange & encryption)
 async function testCryptoEngine() {
   console.log('[1/4] Testing Zero-Knowledge Web Crypto Engine (ECDH P-256 + AES-256-GCM)...');
@@ -56,7 +68,7 @@ async function testCryptoEngine() {
   );
 
   // Alice encrypts a confidential message
-  const secretMessage = "Hello my love! This message is 100% private and encrypted.";
+  const secretMessage = "Hello! This message is 100% private and encrypted.";
   const enc = new TextEncoder();
   const iv = webcrypto.getRandomValues(new Uint8Array(12));
 
@@ -83,12 +95,83 @@ async function testCryptoEngine() {
   }
 }
 
-// 2. Database Adapter Test
+// 2. Zero-Knowledge Key Backup & Login Recovery Test
+async function testKeyBackupAndLoginRecovery() {
+  console.log('\n[2/4] Testing Zero-Knowledge PBKDF2 Master Key Derivation & Private Key Backup Recovery...');
+
+  const password = 'CorrectHorseBatteryStaple99!';
+  const salt = webcrypto.getRandomValues(new Uint8Array(16));
+  const saltBase64 = arrayBufferToBase64(salt);
+
+  // Registration: Derive masterKey from raw random salt
+  const enc = new TextEncoder();
+  const passKey = await subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+  const regMasterKey = await subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    passKey,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+
+  // Auth Verifier
+  const verifierData = enc.encode(`${password}:${saltBase64}`);
+  const authVerifierBuf = await subtle.digest('SHA-256', verifierData);
+  const authVerifier = arrayBufferToBase64(authVerifierBuf);
+
+  // Generate private key & encrypt backup
+  const keyPair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+  const privateKeyJwk = JSON.stringify(await subtle.exportKey('jwk', keyPair.privateKey));
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+
+  const encryptedPrivKeyBuf = await subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    regMasterKey,
+    enc.encode(privateKeyJwk)
+  );
+  const encryptedPrivKeyBase64 = arrayBufferToBase64(encryptedPrivKeyBuf);
+  const ivBase64 = arrayBufferToBase64(iv);
+
+  // Simulating Login on a new device with only (username, password, saltBase64 from server)
+  const loginSaltBuffer = base64ToArrayBuffer(saltBase64);
+  const loginPassKey = await subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+  const loginMasterKey = await subtle.deriveKey(
+    { name: 'PBKDF2', salt: loginSaltBuffer, iterations: 100000, hash: 'SHA-256' },
+    loginPassKey,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+
+  // Check login auth verifier matches
+  const loginVerifierBuf = await subtle.digest('SHA-256', enc.encode(`${password}:${saltBase64}`));
+  const loginVerifier = arrayBufferToBase64(loginVerifierBuf);
+
+  if (loginVerifier !== authVerifier) {
+    throw new Error('Auth verifier token mismatch on login!');
+  }
+
+  // Decrypt private key backup
+  const decryptedPrivKeyBuf = await subtle.decrypt(
+    { name: 'AES-GCM', iv: new Uint8Array(base64ToArrayBuffer(ivBase64)) },
+    loginMasterKey,
+    base64ToArrayBuffer(encryptedPrivKeyBase64)
+  );
+
+  const recoveredJwkString = new TextDecoder().decode(decryptedPrivKeyBuf);
+  if (recoveredJwkString !== privateKeyJwk) {
+    throw new Error('Recovered private key JWK does not match original!');
+  }
+
+  console.log('  ✅ Zero-Knowledge Key Backup & Decryption on Login Passed!');
+}
+
+// 3. Database Adapter Test
 async function testDatabaseAdapter() {
-  console.log('\n[2/4] Testing Universal Database Adapter & Schema...');
+  console.log('\n[3/4] Testing Universal Database Adapter & Schema...');
   const { db } = await import('../server/config/db.js');
 
-  const testUsername = `test_user_${Date.now()}`;
+  const testUsername = `user_${Date.now()}`;
   const user = await db.createUser({
     username: testUsername,
     auth_verifier: 'mock_verifier_token',
@@ -116,6 +199,13 @@ async function testDatabaseAdapter() {
   }
   console.log(`  ✅ Conversation Creation Passed: Conv ID = ${conv.id}`);
 
+  // Test participant retrieval
+  const participants = await db.getConversationParticipants(conv.id);
+  if (!participants || participants.length === 0) {
+    throw new Error('Failed to retrieve conversation participants');
+  }
+  console.log(`  ✅ Participant Lookup Passed`);
+
   // Test encrypted message saving
   const msg = await db.saveMessage({
     conversation_id: conv.id,
@@ -128,12 +218,44 @@ async function testDatabaseAdapter() {
     throw new Error('Failed to save message ciphertext');
   }
   console.log(`  ✅ Encrypted Message Storage Passed: Stored only Ciphertext & IV in DB`);
+
+  // Test User Search
+  const searchResults = await db.searchUsers(testUsername.substring(0, 6));
+  if (!searchResults.some(u => u.username === testUsername)) {
+    throw new Error('User search failed to find newly created user');
+  }
+  console.log(`  ✅ User Search Passed`);
+}
+
+// 4. Validation & Sanitization Tests
+async function testValidationRules() {
+  console.log('\n[4/4] Testing Username Validation Rules...');
+  const usernameRegex = /^[a-z0-9_.-]{3,30}$/;
+
+  const validUsernames = ['alice', 'bob_123', 'john-doe', 'user.name', 'dev_01'];
+  const invalidUsernames = ['ab', 'a'.repeat(31), 'user name', 'admin/test', 'user@domain', 'alert(1)', 'test#1'];
+
+  for (const name of validUsernames) {
+    if (!usernameRegex.test(name)) {
+      throw new Error(`Valid username rejected: ${name}`);
+    }
+  }
+
+  for (const name of invalidUsernames) {
+    if (usernameRegex.test(name)) {
+      throw new Error(`Invalid username accepted: ${name}`);
+    }
+  }
+
+  console.log('  ✅ Username Validation Rules Passed');
 }
 
 async function runAllTests() {
   try {
     await testCryptoEngine();
+    await testKeyBackupAndLoginRecovery();
     await testDatabaseAdapter();
+    await testValidationRules();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
@@ -144,4 +266,3 @@ async function runAllTests() {
 }
 
 runAllTests();
-

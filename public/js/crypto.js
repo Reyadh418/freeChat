@@ -145,6 +145,10 @@ export async function decryptPrivateKeyBackup(encryptedBase64, ivBase64, masterK
   return await importPrivateKey(jwkString);
 }
 
+export function clearSharedKeyCache() {
+  sharedKeyCache.clear();
+}
+
 // Key exchange
 export async function getSharedSecretKey(localPrivateKey, remotePublicKeyJwk, cacheId = null) {
   if (cacheId && sharedKeyCache.has(cacheId)) {
