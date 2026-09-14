@@ -3,24 +3,34 @@ let currentActiveConversationId = null;
 
 export const Realtime = {
   connect({
-    userId,
+    token,
     onMessageReceived,
     onTypingChange,
     onStatusChange,
     onOnlineUsersList,
-    onConversationUpdated
+    onConversationUpdated,
+    onConnectError
   }) {
     if (socket) {
       socket.disconnect();
     }
 
+    // Connect with JWT auth token
     // @ts-ignore
-    socket = window.io();
+    socket = window.io({
+      auth: { token }
+    });
 
     socket.on('connect', () => {
-      socket.emit('user_connected', userId);
       if (currentActiveConversationId) {
         socket.emit('join_conversation', currentActiveConversationId);
+      }
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[Socket Auth Error]:', err.message);
+      if (typeof onConnectError === 'function') {
+        onConnectError(err);
       }
     });
 
@@ -60,7 +70,11 @@ export const Realtime = {
   joinConversation(conversationId) {
     currentActiveConversationId = conversationId;
     if (socket && conversationId) {
-      socket.emit('join_conversation', conversationId);
+      socket.emit('join_conversation', conversationId, (response) => {
+        if (response?.error) {
+          console.warn('[Realtime Join Denied]:', response.error);
+        }
+      });
     }
   },
 
@@ -87,15 +101,15 @@ export const Realtime = {
     });
   },
 
-  sendTypingStart(conversationId, userId, username) {
-    if (socket) {
-      socket.emit('typing_start', { conversationId, userId, username });
+  sendTypingStart(conversationId) {
+    if (socket && conversationId) {
+      socket.emit('typing_start', { conversationId });
     }
   },
 
-  sendTypingStop(conversationId, userId, username) {
-    if (socket) {
-      socket.emit('typing_stop', { conversationId, userId, username });
+  sendTypingStop(conversationId) {
+    if (socket && conversationId) {
+      socket.emit('typing_stop', { conversationId });
     }
   },
 

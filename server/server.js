@@ -9,6 +9,8 @@ import { fileURLToPath } from 'url';
 import { db } from './config/db.js';
 import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from './middleware/auth.js';
 
 dotenv.config();
 
@@ -55,34 +57,76 @@ app.get('*', (req, res) => {
 // Realtime
 const onlineUsers = new Map();
 
+// Socket.IO Handshake Authentication Middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || 
+    (socket.handshake.headers?.authorization?.startsWith('Bearer ') 
+      ? socket.handshake.headers.authorization.substring(7) 
+      : null);
+
+  if (!token) {
+    return next(new Error('Authentication error: Token required.'));
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.user = {
+      id: decoded.id,
+      username: decoded.username
+    };
+    next();
+  } catch (err) {
+    return next(new Error('Authentication error: Invalid or expired token.'));
+  }
+});
+
 io.on('connection', (socket) => {
-  let authenticatedUserId = null;
+  const authenticatedUserId = socket.user.id;
 
-  // Presence
-  socket.on('user_connected', (userId) => {
-    if (!userId) return;
-    authenticatedUserId = userId;
+  // Automatically register presence for verified user
+  if (!onlineUsers.has(authenticatedUserId)) {
+    onlineUsers.set(authenticatedUserId, new Set());
+  }
+  onlineUsers.get(authenticatedUserId).add(socket.id);
 
-    if (!onlineUsers.has(userId)) {
-      onlineUsers.set(userId, new Set());
-    }
-    onlineUsers.get(userId).add(socket.id);
+  socket.join(`user:${authenticatedUserId}`);
+  // Send current online users list to this user
+  socket.emit('online_users_list', Array.from(onlineUsers.keys()));
 
-    socket.join(`user:${userId}`);
-    // Send current online users list to this user
-    socket.emit('online_users_list', Array.from(onlineUsers.keys()));
-
-    io.emit('user_status_change', {
-      userId,
-      status: 'online',
-      lastSeen: new Date().toISOString()
-    });
+  io.emit('user_status_change', {
+    userId: authenticatedUserId,
+    status: 'online',
+    lastSeen: new Date().toISOString()
   });
 
-  // Room
-  socket.on('join_conversation', (conversationId) => {
+  // Client-initiated sync (only allowed for authenticated user's own ID)
+  socket.on('user_connected', () => {
+    socket.emit('online_users_list', Array.from(onlineUsers.keys()));
+  });
+
+  // Room Authorization Check
+  socket.on('join_conversation', async (conversationId, callback) => {
     if (!conversationId) return;
-    socket.join(`conv:${conversationId}`);
+
+    try {
+      const isParticipant = await db.isUserInConversation(conversationId, socket.user.id);
+      if (!isParticipant) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Access denied: not a participant of this conversation.' });
+        }
+        return;
+      }
+
+      socket.join(`conv:${conversationId}`);
+      if (typeof callback === 'function') {
+        callback({ success: true });
+      }
+    } catch (err) {
+      console.error('[Socket Join Error]:', err);
+      if (typeof callback === 'function') {
+        callback({ error: 'Failed to join conversation.' });
+      }
+    }
   });
 
   socket.on('leave_conversation', (conversationId) => {
@@ -90,33 +134,58 @@ io.on('connection', (socket) => {
     socket.leave(`conv:${conversationId}`);
   });
 
-  // Typing
-  socket.on('typing_start', ({ conversationId, userId, username }) => {
-    socket.to(`conv:${conversationId}`).emit('user_typing', {
-      conversationId,
-      userId,
-      username,
-      isTyping: true
-    });
+  // Typing Indicators (enforce verified identity and participant check)
+  socket.on('typing_start', async ({ conversationId }) => {
+    if (!conversationId) return;
+    try {
+      const isParticipant = await db.isUserInConversation(conversationId, socket.user.id);
+      if (!isParticipant) return;
+
+      socket.to(`conv:${conversationId}`).emit('user_typing', {
+        conversationId,
+        userId: socket.user.id,
+        username: socket.user.username,
+        isTyping: true
+      });
+    } catch (err) {
+      console.error('[Socket Typing Error]:', err);
+    }
   });
 
-  socket.on('typing_stop', ({ conversationId, userId, username }) => {
-    socket.to(`conv:${conversationId}`).emit('user_typing', {
-      conversationId,
-      userId,
-      username,
-      isTyping: false
-    });
+  socket.on('typing_stop', async ({ conversationId }) => {
+    if (!conversationId) return;
+    try {
+      const isParticipant = await db.isUserInConversation(conversationId, socket.user.id);
+      if (!isParticipant) return;
+
+      socket.to(`conv:${conversationId}`).emit('user_typing', {
+        conversationId,
+        userId: socket.user.id,
+        username: socket.user.username,
+        isTyping: false
+      });
+    } catch (err) {
+      console.error('[Socket Typing Error]:', err);
+    }
   });
 
-  // Messages
+  // Messages (enforce verified senderId and participant authorization)
   socket.on('send_message', async (messageData, callback) => {
     try {
-      const { conversationId, senderId, ciphertext, iv, senderPublicKey, mediaUrl, mediaType } = messageData;
+      const { conversationId, ciphertext, iv, senderPublicKey, mediaUrl, mediaType } = messageData;
+      const senderId = socket.user.id; // Enforce verified identity
 
-      if (!conversationId || !senderId || !ciphertext || !iv) {
+      if (!conversationId || !ciphertext || !iv) {
         if (typeof callback === 'function') {
           callback({ error: 'Missing payload.' });
+        }
+        return;
+      }
+
+      const isParticipant = await db.isUserInConversation(conversationId, senderId);
+      if (!isParticipant) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Access denied: not a participant of this conversation.' });
         }
         return;
       }

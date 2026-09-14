@@ -289,7 +289,7 @@ async function onAuthSuccess() {
   elements.sidebarAvatar.style.backgroundColor = state.currentUser.avatar_color || '#007AFF';
 
   Realtime.connect({
-    userId: state.currentUser.id,
+    token: API.getToken(),
     onOnlineUsersList: (userIds) => {
       state.onlineUsers = new Set(userIds);
       renderConversationsList();
@@ -298,7 +298,14 @@ async function onAuthSuccess() {
     onMessageReceived: handleIncomingMessage,
     onTypingChange: handleTypingChange,
     onStatusChange: handleUserStatusChange,
-    onConversationUpdated: () => loadConversations()
+    onConversationUpdated: () => loadConversations(),
+    onConnectError: (err) => {
+      console.warn('[Socket Connection Error]:', err.message);
+      if (err.message.includes('Authentication error') || err.message.includes('token')) {
+        showToast('Realtime session expired. Please log in again.');
+        handleLogout(false);
+      }
+    }
   });
 
   await loadConversations();
@@ -506,11 +513,7 @@ async function handleSendMessage() {
     state.conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
     renderConversationsList();
 
-    Realtime.sendTypingStop(
-      state.activeConversation.id,
-      state.currentUser.id,
-      state.currentUser.username
-    );
+    Realtime.sendTypingStop(state.activeConversation.id);
   } catch (err) {
     console.error('[Send Error]:', err);
     showToast('Failed to send encrypted message.');
@@ -555,21 +558,13 @@ function handleTypingInput() {
 
   if (!state.isTyping) {
     state.isTyping = true;
-    Realtime.sendTypingStart(
-      state.activeConversation.id,
-      state.currentUser.id,
-      state.currentUser.username
-    );
+    Realtime.sendTypingStart(state.activeConversation.id);
   }
 
   clearTimeout(state.isTypingTimer);
   state.isTypingTimer = setTimeout(() => {
     state.isTyping = false;
-    Realtime.sendTypingStop(
-      state.activeConversation.id,
-      state.currentUser.id,
-      state.currentUser.username
-    );
+    Realtime.sendTypingStop(state.activeConversation.id);
   }, 2000);
 }
 
