@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Environment Variables & Secrets
 .env
@@ -22,4 +21,4 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 .idea/
-video/
+Video/
