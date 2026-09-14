@@ -427,6 +427,8 @@ async function loadMessages(convId) {
 
   try {
     const messages = await API.getMessages(convId);
+    if (state.activeConversation?.id !== convId) return;
+
     let lastDateStr = null;
 
     for (const msg of messages) {

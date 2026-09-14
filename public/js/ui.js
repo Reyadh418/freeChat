@@ -17,13 +17,16 @@ export function formatDateDivider(dateInput) {
   const now = new Date();
   
   const isToday = date.toDateString() === now.toDateString();
-  const isYesterday = new Date(now.setDate(now.getDate() - 1)).toDateString() === date.toDateString();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
 
-  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (isToday) return 'Today';
+  if (isYesterday) return 'Yesterday';
 
-  if (isToday) return `Today ${timeStr}`;
-  if (isYesterday) return `Yesterday ${timeStr}`;
-  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${timeStr}`;
+  const isCurrentYear = date.getFullYear() === now.getFullYear();
+  return isCurrentYear
+    ? date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+    : date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function showToast(message, duration = 3000) {
