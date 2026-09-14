@@ -92,13 +92,22 @@ async function initApp() {
   initTheme();
   setupEventListeners();
 
+  window.addEventListener('auth:expired', () => {
+    showToast('Session expired. Please log in again.');
+    handleLogout(false);
+  });
+
   const savedUserJson = localStorage.getItem('freeChat_user');
-  if (savedUserJson) {
+  const token = API.getToken();
+
+  if (savedUserJson && token) {
     try {
       const user = JSON.parse(savedUserJson);
+      // Validate token with backend
+      const meRes = await API.getMe();
       const keys = await KeyStore.getUserKeys(user.id);
 
-      if (keys?.privateKey) {
+      if (keys?.privateKey && meRes.user) {
         state.currentUser = user;
         state.localPrivateKey = keys.privateKey;
         state.localPublicKey = keys.publicKey;
@@ -106,7 +115,9 @@ async function initApp() {
         return;
       }
     } catch (err) {
-      console.warn('[Init] Session invalid:', err);
+      console.warn('[Init] Session invalid or expired:', err);
+      API.clearToken();
+      localStorage.removeItem('freeChat_user');
     }
   }
 
@@ -251,12 +262,13 @@ async function handleAuthSubmit(e) {
   }
 }
 
-function handleLogout() {
-  if (confirm('Are you sure you want to log out? Your keys remain securely encrypted.')) {
+function handleLogout(showConfirmation = true) {
+  if (!showConfirmation || confirm('Are you sure you want to log out? Your keys remain securely encrypted.')) {
     if (state.currentUser) {
       KeyStore.clearUserKeys(state.currentUser.id);
     }
     clearSharedKeyCache();
+    API.clearToken();
     localStorage.removeItem('freeChat_user');
     Realtime.disconnect();
     state.currentUser = null;
@@ -295,7 +307,7 @@ async function onAuthSuccess() {
 // Conversations
 async function loadConversations() {
   try {
-    const convs = await API.getConversations(state.currentUser.id);
+    const convs = await API.getConversations();
     state.conversations = convs;
     renderConversationsList();
   } catch (err) {
@@ -627,7 +639,7 @@ async function handleUserSearch() {
 
   searchDebounceTimer = setTimeout(async () => {
     try {
-      const results = await API.searchUsers(query, state.currentUser.id);
+      const results = await API.searchUsers(query);
       elements.searchResultsList.innerHTML = '';
 
       if (results.length === 0) {
@@ -671,7 +683,7 @@ async function handleUserSearch() {
 async function startDirectChatWith(targetUsername) {
   closeNewChatModal();
   try {
-    const conv = await API.createDirectConversation(state.currentUser.id, targetUsername);
+    const conv = await API.createDirectConversation(targetUsername);
     await loadConversations();
     selectConversation(conv);
   } catch (err) {

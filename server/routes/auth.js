@@ -1,5 +1,6 @@
 import express from 'express';
 import { db } from '../config/db.js';
+import { generateToken, authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -32,8 +33,11 @@ router.post('/register', async (req, res) => {
       avatar_color
     });
 
+    const token = generateToken(user);
+
     res.status(201).json({
       success: true,
+      token,
       user: {
         id: user.id,
         username: user.username,
@@ -89,8 +93,11 @@ router.post('/login', async (req, res) => {
 
     await db.updateLastSeen(user.id);
 
+    const token = generateToken(user);
+
     res.json({
       success: true,
+      token,
       user: {
         id: user.id,
         username: user.username,
@@ -105,6 +112,31 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('[Auth Error]:', err);
     res.status(500).json({ error: 'Failed to log in.' });
+  }
+});
+
+// Current Authenticated User Session Verification
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await db.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        public_key: user.public_key,
+        avatar_color: user.avatar_color,
+        status_message: user.status_message,
+        last_seen: user.last_seen,
+        created_at: user.created_at
+      }
+    });
+  } catch (err) {
+    console.error('[Auth Error]:', err);
+    res.status(500).json({ error: 'Failed to verify session.' });
   }
 });
 

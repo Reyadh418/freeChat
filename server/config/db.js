@@ -347,6 +347,24 @@ export const db = {
     }
   },
 
+  async isUserInConversation(convId, userId) {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', convId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return Boolean(data);
+    } else {
+      const data = loadLocalData();
+      return data.conversation_participants.some(
+        p => p.conversation_id === convId && p.user_id === userId
+      );
+    }
+  },
+
   // Messages
   async saveMessage({ conversation_id, sender_id, ciphertext, iv, sender_public_key = null, media_url = null, media_type = null }) {
     const id = crypto.randomUUID();

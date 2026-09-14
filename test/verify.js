@@ -250,12 +250,80 @@ async function testValidationRules() {
   console.log('  ✅ Username Validation Rules Passed');
 }
 
+// 5. API Authentication & IDOR Authorization Tests
+async function testApiAuthenticationAndIdor() {
+  console.log('\n[5/5] Testing JWT Authentication & IDOR / BOLA Authorization Controls...');
+  const { generateToken, authMiddleware } = await import('../server/middleware/auth.js');
+  const { db } = await import('../server/config/db.js');
+
+  const aliceId = 'alice_' + Date.now();
+  const bobId = 'bob_' + Date.now();
+  const eveId = 'eve_' + Date.now();
+
+  const aliceToken = generateToken({ id: aliceId, username: 'alice' });
+  const eveToken = generateToken({ id: eveId, username: 'eve' });
+
+  // 1. Verify token rejection when header is missing
+  let unauthStatus = null;
+  const mockReqNoAuth = { headers: {} };
+  const mockResNoAuth = {
+    status(code) { unauthStatus = code; return this; },
+    json(payload) { return payload; }
+  };
+  authMiddleware(mockReqNoAuth, mockResNoAuth, () => {});
+  if (unauthStatus !== 401) {
+    throw new Error(`Expected 401 Unauthorized for missing token, got ${unauthStatus}`);
+  }
+  console.log('  ✅ Unauthenticated Request Rejected with 401 Unauthorized');
+
+  // 2. Verify token rejection when token is forged/invalid
+  let invalidStatus = null;
+  const mockReqBadAuth = { headers: { authorization: 'Bearer invalid.tampered.token' } };
+  const mockResBadAuth = {
+    status(code) { invalidStatus = code; return this; },
+    json(payload) { return payload; }
+  };
+  authMiddleware(mockReqBadAuth, mockResBadAuth, () => {});
+  if (invalidStatus !== 401) {
+    throw new Error(`Expected 401 Unauthorized for tampered token, got ${invalidStatus}`);
+  }
+  console.log('  ✅ Tampered/Invalid Token Rejected with 401 Unauthorized');
+
+  // 3. Verify legitimate token is accepted
+  let nextCalled = false;
+  const mockReqAlice = { headers: { authorization: `Bearer ${aliceToken}` } };
+  authMiddleware(mockReqAlice, {}, () => { nextCalled = true; });
+  if (!nextCalled || mockReqAlice.user?.id !== aliceId) {
+    throw new Error('Valid token was not properly verified by authMiddleware');
+  }
+  console.log('  ✅ Valid JWT Accepted and User Context Attached to Request');
+
+  // 4. Create conversation between Alice and Bob
+  const conv = await db.createConversation({
+    type: 'direct',
+    created_by: aliceId,
+    participantIds: [aliceId, bobId]
+  });
+
+  // 5. Test IDOR / BOLA defense: Verify isUserInConversation
+  const isAliceParticipant = await db.isUserInConversation(conv.id, aliceId);
+  const isBobParticipant = await db.isUserInConversation(conv.id, bobId);
+  const isEveParticipant = await db.isUserInConversation(conv.id, eveId);
+
+  if (!isAliceParticipant) throw new Error('Alice should be recognized as a participant');
+  if (!isBobParticipant) throw new Error('Bob should be recognized as a participant');
+  if (isEveParticipant) throw new Error('Eve should NOT be recognized as a participant');
+
+  console.log('  ✅ Object-Level Authorization (IDOR/BOLA Defense): Non-participant access blocked, authorized participants allowed');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
     await testKeyBackupAndLoginRecovery();
     await testDatabaseAdapter();
     await testValidationRules();
+    await testApiAuthenticationAndIdor();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');

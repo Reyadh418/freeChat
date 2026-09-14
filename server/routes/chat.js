@@ -1,17 +1,22 @@
 import express from 'express';
 import { db } from '../config/db.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Require authentication for all chat routes
+router.use(authMiddleware);
 
 // Search users
 router.get('/users/search', async (req, res) => {
   try {
-    const { q, exclude } = req.query;
+    const { q } = req.query;
     if (!q || q.trim().length < 1) {
       return res.json([]);
     }
 
-    const users = await db.searchUsers(q.trim(), exclude || null);
+    // Exclude the authenticated requesting user
+    const users = await db.searchUsers(q.trim(), req.user.id);
     res.json(users);
   } catch (err) {
     console.error('[Chat Error]:', err);
@@ -19,14 +24,10 @@ router.get('/users/search', async (req, res) => {
   }
 });
 
-// Conversations
+// Conversations (scoped strictly to authenticated user)
 router.get('/conversations', async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required.' });
-    }
-
+    const userId = req.user.id;
     const conversations = await db.getUserConversations(userId);
     res.json(conversations);
   } catch (err) {
@@ -35,12 +36,13 @@ router.get('/conversations', async (req, res) => {
   }
 });
 
-// Direct chat
+// Direct chat (initiator is always authenticated user)
 router.post('/conversations/direct', async (req, res) => {
   try {
-    const { currentUserId, targetUsername } = req.body;
-    if (!currentUserId || !targetUsername) {
-      return res.status(400).json({ error: 'Current user ID and target username are required.' });
+    const currentUserId = req.user.id;
+    const { targetUsername } = req.body;
+    if (!targetUsername) {
+      return res.status(400).json({ error: 'Target username is required.' });
     }
 
     const targetUser = await db.getUserByUsername(targetUsername.trim().toLowerCase());
@@ -81,11 +83,17 @@ router.post('/conversations/direct', async (req, res) => {
   }
 });
 
-// Messages
+// Messages (authorized participants only - IDOR / BOLA defense)
 router.get('/conversations/:convId/messages', async (req, res) => {
   try {
     const { convId } = req.params;
     const limit = parseInt(req.query.limit) || 100;
+
+    // Verify requesting user is a legitimate participant
+    const isParticipant = await db.isUserInConversation(convId, req.user.id);
+    if (!isParticipant) {
+      return res.status(403).json({ error: 'Access denied. You are not a participant in this conversation.' });
+    }
 
     const messages = await db.getConversationMessages(convId, limit);
     res.json(messages);
@@ -96,3 +104,4 @@ router.get('/conversations/:convId/messages', async (req, res) => {
 });
 
 export default router;
+
