@@ -731,6 +731,100 @@ async function testEncryptedKeyStoreAndNonExtractableKeys() {
   getVaultStorage().removeItem('freeChat_vault_key');
 }
 
+// 11. HTTP Security Headers & Restricted CORS Tests
+async function testHttpSecurityHeadersAndRestrictedCors() {
+  console.log('\n[11/11] Testing HTTP Security Headers & Restricted CORS Controls...');
+  const { securityHeadersMiddleware, isOriginAllowed, corsOptions } = await import('../server/middleware/security.js');
+
+  // 1. Test Security Headers Middleware
+  const headers = {};
+  const mockReq = { secure: true, headers: {} };
+  const mockRes = {
+    setHeader(key, val) {
+      headers[key.toLowerCase()] = val;
+    }
+  };
+  let nextCalled = false;
+  securityHeadersMiddleware(mockReq, mockRes, () => { nextCalled = true; });
+
+  if (!nextCalled) {
+    throw new Error('securityHeadersMiddleware did not call next()');
+  }
+
+  // Anti-clickjacking
+  if (headers['x-frame-options'] !== 'DENY') {
+    throw new Error(`Expected X-Frame-Options: DENY, got: ${headers['x-frame-options']}`);
+  }
+  // Anti-MIME sniffing
+  if (headers['x-content-type-options'] !== 'nosniff') {
+    throw new Error(`Expected X-Content-Type-Options: nosniff, got: ${headers['x-content-type-options']}`);
+  }
+  // CSP
+  const csp = headers['content-security-policy'];
+  if (!csp || !csp.includes("frame-ancestors 'none'") || !csp.includes("default-src 'self'")) {
+    throw new Error(`CSP header missing essential directives: ${csp}`);
+  }
+  // HSTS
+  if (!headers['strict-transport-security'] || !headers['strict-transport-security'].includes('max-age')) {
+    throw new Error(`HSTS header missing or invalid: ${headers['strict-transport-security']}`);
+  }
+  // Referrer & Permissions & COOP/CORP
+  if (headers['referrer-policy'] !== 'strict-origin-when-cross-origin') {
+    throw new Error(`Referrer-Policy missing or invalid: ${headers['referrer-policy']}`);
+  }
+  if (!headers['permissions-policy'] || !headers['permissions-policy'].includes('camera=()')) {
+    throw new Error(`Permissions-Policy missing or invalid: ${headers['permissions-policy']}`);
+  }
+  if (headers['cross-origin-opener-policy'] !== 'same-origin') {
+    throw new Error('COOP header missing');
+  }
+  if (headers['cross-origin-resource-policy'] !== 'same-origin') {
+    throw new Error('CORP header missing');
+  }
+  console.log('  ✅ HTTP Security Headers: CSP, X-Frame-Options, noSniff, HSTS, Referrer, and Permissions policies enforced');
+
+  // 2. Test CORS Origin Validation (Default & Local Dev)
+  if (!isOriginAllowed(null)) {
+    throw new Error('Same-origin/non-browser requests (null origin) should be allowed');
+  }
+  if (!isOriginAllowed('http://localhost:3000') || !isOriginAllowed('http://127.0.0.1:5173')) {
+    throw new Error('Localhost/127.0.0.1 development origins should be allowed');
+  }
+  if (isOriginAllowed('https://malicious-attacker-site.com')) {
+    throw new Error('CRITICAL: Unauthorized foreign origin was permitted by CORS!');
+  }
+  console.log('  ✅ Restricted CORS: Same-origin & localhost allowed; arbitrary foreign origins blocked');
+
+  // 3. Test Express CORS callback integration
+  let corsError = null;
+  corsOptions.origin('https://evil.org', (err, allowed) => {
+    corsError = err;
+  });
+  if (!corsError) {
+    throw new Error('corsOptions failed to reject unauthorized origin with an error');
+  }
+
+  let corsAllowed = false;
+  corsOptions.origin('http://localhost:3000', (err, allowed) => {
+    corsAllowed = allowed;
+  });
+  if (!corsAllowed) {
+    throw new Error('corsOptions failed to allow legitimate localhost origin');
+  }
+  console.log('  ✅ CORS Middleware Enforcement: Unauthorized origins yield CORS error callback');
+
+  // 4. Test Production ALLOWED_ORIGINS Whitelist
+  process.env.ALLOWED_ORIGINS = 'https://mychat.example.com,https://app.freechat.io';
+  if (!isOriginAllowed('https://mychat.example.com') || !isOriginAllowed('https://app.freechat.io')) {
+    throw new Error('Whitelisted origins should be allowed when ALLOWED_ORIGINS is configured');
+  }
+  if (isOriginAllowed('https://random-phishing.com')) {
+    throw new Error('Non-whitelisted origin was incorrectly allowed under ALLOWED_ORIGINS config');
+  }
+  delete process.env.ALLOWED_ORIGINS;
+  console.log('  ✅ Whitelist Configuration: ALLOWED_ORIGINS environment variable strictly enforced');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -743,6 +837,7 @@ async function runAllTests() {
     await testHardenedAuthVerifierAndServerHashing();
     await testSafetyNumberAndMitmDefense();
     await testEncryptedKeyStoreAndNonExtractableKeys();
+    await testHttpSecurityHeadersAndRestrictedCors();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');

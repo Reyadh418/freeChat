@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
+import { securityHeadersMiddleware, corsOptions, isOriginAllowed } from './middleware/security.js';
 
 dotenv.config();
 
@@ -18,17 +19,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.disable('x-powered-by');
+
 const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS policy: Socket connection denied for this origin.'));
+      }
+    },
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
 // Middleware
-app.use(cors());
+app.use(securityHeadersMiddleware);
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
