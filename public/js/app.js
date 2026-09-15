@@ -175,6 +175,7 @@ function showAuthModal(mode = 'login') {
     elements.authTitle.textContent = 'Welcome Back';
     elements.authSubtitle.textContent = 'Sign in with your private credentials';
     elements.authSubmitBtn.textContent = 'Sign In';
+    elements.authPasswordInput.setAttribute('autocomplete', 'current-password');
   } else {
     elements.tabRegister.classList.add('active');
     elements.tabRegister.setAttribute('aria-selected', 'true');
@@ -183,6 +184,7 @@ function showAuthModal(mode = 'login') {
     elements.authTitle.textContent = 'Create Identity';
     elements.authSubtitle.textContent = 'Generate your local E2EE keys';
     elements.authSubmitBtn.textContent = 'Create Account & Keys';
+    elements.authPasswordInput.setAttribute('autocomplete', 'new-password');
   }
   elements.authUsernameInput.focus();
 }
@@ -386,10 +388,25 @@ function renderConversationsList() {
 
   if (filteredConvs.length === 0) {
     elements.conversationsList.innerHTML = `
-      <div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 14px;">
-        ${q ? `No conversations matching "${escapeHtml(q)}"` : 'No conversations yet.<br>Click <strong>+</strong> to start an E2EE chat!'}
+      <div style="padding: 28px 16px; text-align: center; color: var(--text-secondary); font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <p>${q ? `No conversations matching "<strong>${escapeHtml(q)}</strong>"` : 'No conversations yet.'}</p>
+        <button class="glass-btn glass-btn-primary" id="sidebar-new-chat-cta" style="padding: 7px 16px; font-size: 13px;">
+          ${q ? 'Clear Search' : 'Start a Chat'}
+        </button>
       </div>
     `;
+    const cta = document.getElementById('sidebar-new-chat-cta');
+    if (cta) {
+      cta.addEventListener('click', () => {
+        if (q) {
+          if (elements.searchConvInput) elements.searchConvInput.value = '';
+          state.searchQuery = '';
+          renderConversationsList();
+        } else {
+          openNewChatModal();
+        }
+      });
+    }
     return;
   }
 
@@ -442,6 +459,12 @@ function updateChatHeaderPresence() {
 }
 
 async function selectConversation(conv) {
+  // Mobile navigation history support
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  if (isMobile && !document.body.classList.contains('chat-active')) {
+    history.pushState({ chatActive: true }, '');
+  }
+
   // Always bring UI into view immediately
   document.body.classList.add('chat-active');
   elements.emptyChatState.style.display = 'none';
@@ -495,6 +518,17 @@ async function selectConversation(conv) {
   elements.composerInput.focus();
 }
 
+function ensureDateDivider(createdAt) {
+  const msgDate = new Date(createdAt).toDateString();
+  const dividers = elements.messagesContainer.querySelectorAll('.date-divider');
+  const lastDivider = dividers[dividers.length - 1];
+  if (!lastDivider || lastDivider.dataset.date !== msgDate) {
+    const divider = renderDateDivider(formatDateDivider(createdAt));
+    divider.dataset.date = msgDate;
+    elements.messagesContainer.appendChild(divider);
+  }
+}
+
 async function loadMessages(convId) {
   elements.messagesContainer.innerHTML = `
     <div style="text-align:center; padding: 20px; color: var(--text-secondary); font-size: 13px;">
@@ -519,7 +553,9 @@ async function loadMessages(convId) {
       const msgDate = new Date(msg.created_at).toDateString();
       if (msgDate !== lastDateStr) {
         lastDateStr = msgDate;
-        elements.messagesContainer.appendChild(renderDateDivider(formatDateDivider(msg.created_at)));
+        const divider = renderDateDivider(formatDateDivider(msg.created_at));
+        divider.dataset.date = msgDate;
+        elements.messagesContainer.appendChild(divider);
       }
 
       let plainText = '🔒 [Encrypted Message]';
@@ -563,9 +599,12 @@ async function handleSendMessage() {
       iv
     });
 
-    // If the previous message was also sent by me, cluster it and remove its tail
+    ensureDateDivider(savedMsg.created_at);
+
+    // If the previous message was also sent by me within 2 minutes, cluster it and remove its tail
     const lastRow = elements.messagesContainer.querySelector('.message-row:last-child');
-    if (lastRow && lastRow.classList.contains('sent')) {
+    const isRecent = lastRow?.dataset.timestamp && (Date.now() - Number(lastRow.dataset.timestamp) < 120000);
+    if (lastRow && lastRow.classList.contains('sent') && isRecent) {
       lastRow.classList.remove('has-tail');
       lastRow.classList.add('clustered');
       const prevTail = lastRow.querySelector('.bubble-tail');
@@ -607,9 +646,12 @@ async function handleIncomingMessage(msg) {
       const existingTyping = document.getElementById('active-typing-indicator');
       if (existingTyping) existingTyping.remove();
 
-      // If the previous message was also received, cluster it and remove its tail
+      ensureDateDivider(msg.created_at);
+
+      // If the previous message was also received within 2 minutes, cluster it and remove its tail
       const lastRow = elements.messagesContainer.querySelector('.message-row:last-child');
-      if (lastRow && lastRow.classList.contains('received')) {
+      const isRecent = lastRow?.dataset.timestamp && (new Date(msg.created_at).getTime() - Number(lastRow.dataset.timestamp) < 120000);
+      if (lastRow && lastRow.classList.contains('received') && isRecent) {
         lastRow.classList.remove('has-tail');
         lastRow.classList.add('clustered');
         const prevTail = lastRow.querySelector('.bubble-tail');
@@ -633,9 +675,11 @@ async function handleIncomingMessage(msg) {
 
 // Typing indicators
 function handleTypingInput() {
-  // Auto-resize composer textarea
+  // Auto-resize composer textarea with fallback
   elements.composerInput.style.height = 'auto';
-  elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+  if (elements.composerInput.value.trim().length > 0) {
+    elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+  }
 
   updateSendButtonState();
 
@@ -653,16 +697,27 @@ function handleTypingInput() {
   }, 2000);
 }
 
+let remoteTypingTimeout = null;
+
 function handleTypingChange({ conversationId, username, isTyping }) {
   if (state.activeConversation?.id !== conversationId) return;
 
   const existing = document.getElementById('active-typing-indicator');
 
-  if (isTyping && !existing) {
-    const typingBubble = renderTypingIndicator(username);
-    elements.messagesContainer.appendChild(typingBubble);
-    scrollToBottom(elements.messagesContainer, true);
-  } else if (!isTyping && existing) {
+  clearTimeout(remoteTypingTimeout);
+
+  if (isTyping) {
+    if (!existing) {
+      const typingBubble = renderTypingIndicator(username);
+      elements.messagesContainer.appendChild(typingBubble);
+      scrollToBottom(elements.messagesContainer, true);
+    }
+    // Auto-cleanup after 4 seconds if remote user closes tab or loses connection
+    remoteTypingTimeout = setTimeout(() => {
+      const el = document.getElementById('active-typing-indicator');
+      if (el) el.remove();
+    }, 4000);
+  } else if (existing) {
     existing.remove();
   }
 }
@@ -764,13 +819,16 @@ async function handleUserSearch() {
       results.forEach(user => {
         const item = document.createElement('div');
         item.className = 'search-result-item';
+        item.setAttribute('role', 'button');
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('aria-label', `Start chat with @${user.username}`);
         const initial = escapeHtml((user.username || '?')[0].toUpperCase());
         const rawColor = user.avatar_color || '#007AFF';
         const avatarColor = /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : '#007AFF';
 
         item.innerHTML = `
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div class="avatar" style="background-color: ${avatarColor}; width: 36px; height: 36px; font-size: 14px;">
+            <div class="avatar" style="background-color: ${avatarColor}; width: 36px; height: 36px; font-size: 14px;" aria-hidden="true">
               ${initial}
             </div>
             <div>
@@ -778,10 +836,16 @@ async function handleUserSearch() {
               <div style="font-size: 12px; color: var(--text-secondary);">E2EE Public Key Ready 🔒</div>
             </div>
           </div>
-          <button class="glass-btn glass-btn-primary" style="padding: 6px 14px; font-size: 13px;">Chat</button>
+          <button class="glass-btn glass-btn-primary" style="padding: 6px 14px; font-size: 13px;" tabindex="-1" aria-hidden="true">Chat</button>
         `;
 
         item.addEventListener('click', () => startDirectChatWith(user.username));
+        item.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startDirectChatWith(user.username);
+          }
+        });
         elements.searchResultsList.appendChild(item);
       });
     } catch (err) {
@@ -831,6 +895,14 @@ function setupEventListeners() {
       state.searchQuery = e.target.value;
       renderConversationsList();
     });
+    elements.searchConvInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        elements.searchConvInput.value = '';
+        state.searchQuery = '';
+        renderConversationsList();
+        elements.searchConvInput.blur();
+      }
+    });
   }
 
   // Backdrop click modal close
@@ -841,7 +913,7 @@ function setupEventListeners() {
   });
 
   // Modal keyboard handling (focus trap & Escape)
-  document.addEventListener('keydown', (e) => {
+  window.addEventListener('keydown', (e) => {
     if (elements.newChatModal.classList.contains('active')) {
       if (e.key === 'Escape') {
         closeNewChatModal();
@@ -868,7 +940,17 @@ function setupEventListeners() {
   elements.sendBtn.addEventListener('click', handleSendMessage);
 
   elements.btnBack.addEventListener('click', () => {
-    document.body.classList.remove('chat-active');
+    if (window.history.state?.chatActive) {
+      window.history.back();
+    } else {
+      document.body.classList.remove('chat-active');
+    }
+  });
+
+  window.addEventListener('popstate', (e) => {
+    if (!e.state?.chatActive) {
+      document.body.classList.remove('chat-active');
+    }
   });
 }
 

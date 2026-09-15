@@ -345,7 +345,11 @@
 }
 
 .message-row.clustered {
-  margin-bottom: -2px;
+  margin-bottom: 2px;
+}
+
+.message-row.clustered .bubble-meta {
+  display: none;
 }
 
 /* Authentic iMessage Bubble Tails */
@@ -438,12 +442,12 @@
 .composer-pill {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-glass);
   border-radius: 22px;
-  padding: 6px 14px;
+  padding: 6px 10px 6px 14px;
   min-height: 44px;
 }
 
@@ -456,7 +460,8 @@
   line-height: 1.35;
   resize: none;
   max-height: 120px;
-  padding: 4px 0;
+  padding: 8px 0;
+  field-sizing: content;
 }
 
 .composer-input::placeholder {
@@ -475,6 +480,7 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  margin-bottom: 3px;
   transition: all var(--duration-fast) var(--spring-bounce);
   opacity: 0.4;
   pointer-events: none;
@@ -682,7 +688,7 @@
     inset: 0;
     z-index: 30;
     transform: translateX(100%);
-    transition: transform var(--duration-normal) var(--spring-smooth);
+    transition: transform var(--duration-normal) var(--spring-smooth), visibility 0s linear var(--duration-normal);
     pointer-events: none;
     visibility: hidden;
   }
@@ -696,6 +702,7 @@
     transform: translateX(0);
     pointer-events: auto;
     visibility: visible;
+    transition: transform var(--duration-normal) var(--spring-smooth), visibility 0s linear 0s;
   }
 
   .btn-back {

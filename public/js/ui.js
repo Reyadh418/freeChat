@@ -101,6 +101,7 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastIn
   const row = document.createElement('div');
   row.className = `message-row ${isMine ? 'sent' : 'received'} ${isLastInCluster ? 'has-tail' : 'clustered'}`;
   row.id = `msg-${id}`;
+  row.dataset.timestamp = new Date(createdAt).getTime();
 
   const formattedTime = formatTime(createdAt);
 
@@ -145,8 +146,10 @@ export function renderTypingIndicator(username) {
 
 export function scrollToBottom(element, smooth = true) {
   if (!element) return;
-  element.scrollTo({
-    top: element.scrollHeight,
-    behavior: smooth ? 'smooth' : 'auto'
+  requestAnimationFrame(() => {
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    });
   });
 }
