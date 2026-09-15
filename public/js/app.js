@@ -2,6 +2,8 @@ import {
   generateKeyPair,
   exportPublicKey,
   importPublicKey,
+  exportPrivateKey,
+  importPrivateKey,
   deriveMasterKey,
   deriveAuthVerifier,
   encryptPrivateKeyBackup,
@@ -138,6 +140,12 @@ async function initApp() {
         state.localPublicKey = keys.publicKey;
         onAuthSuccess();
         return;
+      } else if (user.username) {
+        // Vault session key expired or closed -> prompt password login to unlock vault
+        showAuthModal('login');
+        elements.authUsernameInput.value = user.username;
+        elements.authPasswordInput.focus();
+        return;
       }
     } catch (err) {
       console.warn('[Init] Session invalid or expired:', err);
@@ -257,7 +265,8 @@ async function handleAuthSubmit(e) {
       await KeyStore.saveUserKeys(res.user.id, keyPair.privateKey, keyPair.publicKey);
 
       state.currentUser = res.user;
-      state.localPrivateKey = keyPair.privateKey;
+      // In-memory key is strictly non-extractable to prevent XSS export
+      state.localPrivateKey = await importPrivateKey(await exportPrivateKey(keyPair.privateKey), false);
       state.localPublicKey = keyPair.publicKey;
 
       localStorage.setItem('freeChat_user', JSON.stringify(res.user));
@@ -287,7 +296,9 @@ async function handleAuthSubmit(e) {
       await KeyStore.saveUserKeys(loginRes.user.id, privateKey, publicKey);
 
       state.currentUser = loginRes.user;
-      state.localPrivateKey = privateKey;
+      // In-memory key is strictly non-extractable
+      const privJwk = await exportPrivateKey(privateKey);
+      state.localPrivateKey = await importPrivateKey(privJwk, false);
       state.localPublicKey = publicKey;
 
       localStorage.setItem('freeChat_user', JSON.stringify(loginRes.user));

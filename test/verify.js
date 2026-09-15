@@ -647,6 +647,90 @@ async function testSafetyNumberAndMitmDefense() {
   VerifiedKeys.remove(aliceId, bobId);
 }
 
+// 10. Encrypted KeyStore at Rest & Non-Extractable Private Keys Tests
+async function testEncryptedKeyStoreAndNonExtractableKeys() {
+  console.log('\n[10/10] Testing Encrypted KeyStore at Rest & Non-Extractable Private Keys...');
+  const {
+    importPrivateKey,
+    getOrCreateVaultKey,
+    encryptPrivateKeyForVault,
+    decryptPrivateKeyFromVault,
+    getVaultStorage
+  } = await import('../public/js/crypto.js');
+
+  // 1. Generate an ECDH key pair for testing
+  const keyPair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
+  const privJwk = await subtle.exportKey('jwk', keyPair.privateKey);
+
+  if (!privJwk.d) {
+    throw new Error('Expected raw private key to contain secret coordinate d');
+  }
+
+  // 2. Encrypt private key for vault at rest
+  const vaultKey = await getOrCreateVaultKey();
+  const encryptedVaultObj = await encryptPrivateKeyForVault(privJwk, vaultKey);
+
+  // Verify stored object structure: NO plaintext private key, NO "d" coordinate
+  if (JSON.stringify(encryptedVaultObj).includes(privJwk.d)) {
+    throw new Error('CRITICAL: Plaintext private key coordinate d leaked into vault ciphertext!');
+  }
+  if (!encryptedVaultObj.ciphertext || !encryptedVaultObj.iv) {
+    throw new Error('Encrypted vault object missing ciphertext or iv');
+  }
+  console.log('  ✅ Zero-Plaintext at Rest: Private key encrypted with AES-256-GCM, raw "d" coordinate scrubbed');
+
+  // 3. Verify decryption with correct vault key
+  const decryptedJwkString = await decryptPrivateKeyFromVault(encryptedVaultObj, vaultKey);
+  const decryptedJwk = JSON.parse(decryptedJwkString);
+  if (decryptedJwk.d !== privJwk.d) {
+    throw new Error('Decrypted private key does not match original private key');
+  }
+  console.log('  ✅ Vault Decryption: Successfully decrypted original private key using session vault key');
+
+  // 4. Verify decryption fails with an invalid/tampered vault key
+  const wrongKey = await subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  let failedAsExpected = false;
+  try {
+    await decryptPrivateKeyFromVault(encryptedVaultObj, wrongKey);
+  } catch {
+    failedAsExpected = true;
+  }
+  if (!failedAsExpected) {
+    throw new Error('Vault decryption unexpectedly succeeded with incorrect key');
+  }
+  console.log('  ✅ Tamper & Extraction Resistance: Decryption fails without authenticated session vault key');
+
+  // 5. Test Non-Extractable CryptoKey enforcement
+  const nonExtractableKey = await importPrivateKey(privJwk, false);
+  let exportBlocked = false;
+  try {
+    await subtle.exportKey('jwk', nonExtractableKey);
+  } catch {
+    exportBlocked = true;
+  }
+  if (!exportBlocked) {
+    throw new Error('CRITICAL: In-memory private key was exportable when extractable=false was set!');
+  }
+  console.log('  ✅ Non-Extractable Enforcement: crypto.subtle.exportKey blocked for in-memory private key');
+
+  // 6. Test ECDH key agreement still works with non-extractable key
+  const peerPair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+  const sharedKey = await subtle.deriveKey(
+    { name: 'ECDH', public: peerPair.publicKey },
+    nonExtractableKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+  if (!sharedKey) {
+    throw new Error('ECDH derivation failed with non-extractable key');
+  }
+  console.log('  ✅ Functional Verification: Non-extractable private key derives shared secret successfully');
+
+  // Clean up mock vault storage
+  getVaultStorage().removeItem('freeChat_vault_key');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -658,6 +742,7 @@ async function runAllTests() {
     await testPreLoginAntiEnumerationAndKeyPrivacy();
     await testHardenedAuthVerifierAndServerHashing();
     await testSafetyNumberAndMitmDefense();
+    await testEncryptedKeyStoreAndNonExtractableKeys();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
