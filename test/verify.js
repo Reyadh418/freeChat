@@ -938,6 +938,86 @@ async function testRateLimitingAndBruteForceProtection() {
   testLimiter.destroy();
 }
 
+// 13. Database Row Level Security (RLS) Schema & Configuration Test
+async function testDatabaseRowLevelSecuritySchema() {
+  console.log('\n[13/13] Testing Database Row Level Security (RLS) Schema & Policies...');
+
+  const fs = await import('fs');
+  const path = await import('path');
+  const { fileURLToPath } = await import('url');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  const schemaPath = path.join(__dirname, '../database/schema.sql');
+  if (!fs.existsSync(schemaPath)) {
+    throw new Error('schema.sql not found');
+  }
+  const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
+
+  // 1. Verify RLS is enabled and forced on all tables
+  const tables = ['users', 'conversations', 'conversation_participants', 'messages'];
+  for (const table of tables) {
+    const enableRegex = new RegExp(`ALTER\\s+TABLE\\s+${table}\\s+ENABLE\\s+ROW\\s+LEVEL\\s+SECURITY`, 'i');
+    if (!enableRegex.test(schemaSql)) {
+      throw new Error(`Missing ENABLE ROW LEVEL SECURITY on table: ${table}`);
+    }
+    const forceRegex = new RegExp(`ALTER\\s+TABLE\\s+${table}\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`, 'i');
+    if (!forceRegex.test(schemaSql)) {
+      throw new Error(`Missing FORCE ROW LEVEL SECURITY on table: ${table}`);
+    }
+  }
+  console.log('  ✅ Table-Level RLS: All tables (users, conversations, participants, messages) have ENABLE and FORCE RLS configured');
+
+  // 2. Verify granular policies
+  const requiredPolicies = [
+    'service_role_full_access_users',
+    'service_role_full_access_conversations',
+    'service_role_full_access_participants',
+    'service_role_full_access_messages',
+    'users_select_authenticated',
+    'users_update_own',
+    'users_insert_signup',
+    'conversations_select_participant',
+    'conversations_insert_creator',
+    'conversations_update_participant',
+    'participants_select_member',
+    'participants_insert_creator_or_member',
+    'participants_delete_self_or_owner',
+    'messages_select_participant',
+    'messages_insert_sender_participant'
+  ];
+
+  for (const policy of requiredPolicies) {
+    if (!schemaSql.includes(policy)) {
+      throw new Error(`Missing required RLS policy: ${policy}`);
+    }
+  }
+  console.log('  ✅ Granular Access Policies: 15 granular RLS policies protecting users, conversations, participants, and messages');
+
+  // 3. Verify Supabase backend key role validator in db.js
+  const { validateSupabaseKey } = await import('../server/config/db.js');
+
+  // Mock an anon key (JWT payload with role: 'anon')
+  const mockAnonPayload = Buffer.from(JSON.stringify({ role: 'anon', exp: 9999999999 })).toString('base64');
+  const mockAnonKey = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${mockAnonPayload}.mockSignature`;
+
+  const anonResult = validateSupabaseKey(mockAnonKey);
+  if (anonResult.valid !== false || anonResult.role !== 'anon' || !anonResult.warning) {
+    throw new Error('validateSupabaseKey failed to flag insecure anon role key');
+  }
+  console.log('  ✅ Backend Key Role Validation: Flags anon keys and warns that RLS requires service_role key');
+
+  // Mock a service_role key (JWT payload with role: 'service_role')
+  const mockServicePayload = Buffer.from(JSON.stringify({ role: 'service_role', exp: 9999999999 })).toString('base64');
+  const mockServiceKey = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${mockServicePayload}.mockSignature`;
+
+  const serviceResult = validateSupabaseKey(mockServiceKey);
+  if (serviceResult.valid !== true || serviceResult.role !== 'service_role') {
+    throw new Error('validateSupabaseKey rejected valid service_role key');
+  }
+  console.log('  ✅ Service Role Authorization: Permits verified service_role key for backend operations');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -952,6 +1032,7 @@ async function runAllTests() {
     await testEncryptedKeyStoreAndNonExtractableKeys();
     await testHttpSecurityHeadersAndRestrictedCors();
     await testRateLimitingAndBruteForceProtection();
+    await testDatabaseRowLevelSecuritySchema();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');

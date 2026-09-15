@@ -16,7 +16,39 @@ const isSupabaseConfigured = Boolean(
   !process.env.SUPABASE_URL.includes('your-project-id')
 );
 
+/**
+ * Validates whether the Supabase key supplied for the backend server has the required service_role.
+ * Warns if an 'anon' key is used, as RLS policies on tables will restrict server-side administration.
+ */
+export function validateSupabaseKey(key) {
+  if (!key || typeof key !== 'string') {
+    return { valid: false, error: 'Key is missing or not a string' };
+  }
+  try {
+    const parts = key.split('.');
+    if (parts.length >= 2) {
+      const payloadJson = Buffer.from(parts[1], 'base64').toString('utf-8');
+      const payload = JSON.parse(payloadJson);
+      const role = payload.role || payload.app_metadata?.role;
+      if (role === 'anon') {
+        const warning = '[SECURITY WARNING] freeChat backend server is configured with a Supabase "anon" key. With Row Level Security (RLS) enabled, backend administrative operations may be restricted. Please use the "service_role" secret key in SUPABASE_KEY for server-side operations.';
+        console.warn(warning);
+        return { valid: false, role: 'anon', warning };
+      }
+      return { valid: true, role: role || 'unknown' };
+    }
+  } catch {
+    // If not a parseable JWT, allow normal client initialization to handle connection
+  }
+  return { valid: true, role: 'unknown' };
+}
+
 let supabase = null;
+
+if (isSupabaseConfigured) {
+  validateSupabaseKey(process.env.SUPABASE_KEY);
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+}
 
 // Local fallback store
 const dbDir = path.join(__dirname, '../../database');
