@@ -57,6 +57,15 @@
   fill: currentColor;
 }
 
+#logout-btn {
+  color: var(--text-secondary);
+}
+
+#logout-btn:hover {
+  color: var(--badge-bg);
+  background: rgba(255, 59, 48, 0.12);
+}
+
 /* Search bar */
 .search-bar-container {
   padding: 0 16px 12px;

@@ -1,5 +1,5 @@
 // Cache version
-const CACHE_NAME = 'freechat-cache-v4';
+const CACHE_NAME = 'freechat-cache-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

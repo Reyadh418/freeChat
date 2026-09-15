@@ -58,6 +58,7 @@ const elements = {
   // Chat pane
   chatPane: document.getElementById('chat-pane'),
   emptyChatState: document.getElementById('empty-chat-state'),
+  emptyChatStartBtn: document.getElementById('empty-chat-start-btn'),
   activeChatView: document.getElementById('active-chat-view'),
   chatHeaderAvatar: document.getElementById('chat-header-avatar'),
   chatHeaderName: document.getElementById('chat-header-name'),
@@ -66,6 +67,10 @@ const elements = {
   composerInput: document.getElementById('composer-input'),
   sendBtn: document.getElementById('send-btn'),
   btnBack: document.getElementById('btn-back'),
+
+  // Status banner
+  connectionStatusBar: document.getElementById('connection-status-bar'),
+  connectionStatusText: document.getElementById('connection-status-text'),
 
   // Auth modal
   authModal: document.getElementById('auth-modal'),
@@ -296,6 +301,28 @@ function handleLogout(showConfirmation = true) {
   }
 }
 
+function setConnectionStatus(status, text) {
+  const bar = elements.connectionStatusBar || document.getElementById('connection-status-bar');
+  const label = elements.connectionStatusText || document.getElementById('connection-status-text');
+  if (!bar || !label) return;
+
+  if (status === 'connected') {
+    bar.className = 'connection-status-bar online';
+    label.textContent = text || 'Connected to secure network';
+    setTimeout(() => {
+      bar.classList.add('hidden');
+    }, 1500);
+  } else if (status === 'connecting' || status === 'reconnecting') {
+    bar.className = 'connection-status-bar';
+    label.textContent = text || 'Connecting to real-time network...';
+    bar.classList.remove('hidden');
+  } else if (status === 'offline') {
+    bar.className = 'connection-status-bar';
+    label.textContent = text || 'Offline. Waiting for network...';
+    bar.classList.remove('hidden');
+  }
+}
+
 // Post-auth
 async function onAuthSuccess() {
   elements.sidebarUsername.textContent = `@${state.currentUser.username}`;
@@ -304,6 +331,15 @@ async function onAuthSuccess() {
 
   Realtime.connect({
     token: API.getToken(),
+    onConnect: () => {
+      setConnectionStatus('connected', 'Secure real-time network active');
+    },
+    onDisconnect: () => {
+      setConnectionStatus('reconnecting', 'Connection lost. Reconnecting...');
+    },
+    onReconnectAttempt: () => {
+      setConnectionStatus('reconnecting', 'Reconnecting to real-time network...');
+    },
     onOnlineUsersList: (userIds) => {
       state.onlineUsers = new Set(userIds);
       renderConversationsList();
@@ -315,6 +351,7 @@ async function onAuthSuccess() {
     onConversationUpdated: () => loadConversations(),
     onConnectError: (err) => {
       console.warn('[Socket Connection Error]:', err.message);
+      setConnectionStatus('reconnecting', 'Connection issue. Reconnecting...');
       if (err.message.includes('Authentication error') || err.message.includes('token')) {
         showToast('Realtime session expired. Please log in again.');
         handleLogout(false);
@@ -748,8 +785,19 @@ function setupEventListeners() {
   elements.logoutBtn.addEventListener('click', handleLogout);
 
   elements.newChatBtn.addEventListener('click', openNewChatModal);
+  if (elements.emptyChatStartBtn) {
+    elements.emptyChatStartBtn.addEventListener('click', openNewChatModal);
+  }
   elements.closeNewChatBtn.addEventListener('click', closeNewChatModal);
   elements.userSearchInput.addEventListener('input', handleUserSearch);
+
+  // Network offline and online detection
+  window.addEventListener('online', () => {
+    setConnectionStatus('connecting', 'Network restored. Connecting...');
+  });
+  window.addEventListener('offline', () => {
+    setConnectionStatus('offline', 'No internet connection. Waiting for network...');
+  });
 
   if (elements.searchConvInput) {
     elements.searchConvInput.addEventListener('input', (e) => {
@@ -780,7 +828,12 @@ function setupEventListeners() {
 
   elements.composerInput.addEventListener('input', handleTypingInput);
   elements.composerInput.addEventListener('keydown', (e) => {
+    const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (isMobileViewport) {
+        // On mobile keyboards, allow Return to create a newline
+        return;
+      }
       e.preventDefault();
       handleSendMessage();
     }

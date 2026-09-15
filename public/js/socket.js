@@ -9,6 +9,9 @@ export const Realtime = {
     onStatusChange,
     onOnlineUsersList,
     onConversationUpdated,
+    onConnect,
+    onDisconnect,
+    onReconnectAttempt,
     onConnectError
   }) {
     if (socket) {
@@ -22,10 +25,27 @@ export const Realtime = {
     });
 
     socket.on('connect', () => {
+      if (typeof onConnect === 'function') {
+        onConnect();
+      }
       if (currentActiveConversationId) {
         socket.emit('join_conversation', currentActiveConversationId);
       }
     });
+
+    socket.on('disconnect', (reason) => {
+      if (typeof onDisconnect === 'function') {
+        onDisconnect(reason);
+      }
+    });
+
+    if (socket.io) {
+      socket.io.on('reconnect_attempt', () => {
+        if (typeof onReconnectAttempt === 'function') {
+          onReconnectAttempt();
+        }
+      });
+    }
 
     socket.on('connect_error', (err) => {
       console.error('[Socket Auth Error]:', err.message);
