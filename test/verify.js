@@ -471,6 +471,7 @@ async function testPreLoginAntiEnumerationAndKeyPrivacy() {
         params: {}
       };
       const res = {
+        setHeader() {},
         status(code) { statusCode = code; return this; },
         json(data) { resolve({ status: statusCode, data }); },
         send(data) { resolve({ status: statusCode, data }); }
@@ -825,6 +826,118 @@ async function testHttpSecurityHeadersAndRestrictedCors() {
   console.log('  ✅ Whitelist Configuration: ALLOWED_ORIGINS environment variable strictly enforced');
 }
 
+// 12. Rate Limiting & DoS Defense Tests
+async function testRateLimitingAndBruteForceProtection() {
+  console.log('\n[12/12] Testing Sliding-Window Rate Limiting & DoS Defense Controls...');
+  const {
+    SlidingWindowRateLimiter,
+    authLimiter,
+    apiLimiter,
+    socketHandshakeLimiter,
+    socketMessageLimiter
+  } = await import('../server/middleware/rateLimiter.js');
+
+  // 1. Test SlidingWindowRateLimiter Core Algorithm
+  const testLimiter = new SlidingWindowRateLimiter({
+    windowMs: 1000,
+    max: 3,
+    message: 'Test rate limit exceeded.'
+  });
+
+  const testKey = 'test-ip-127.0.0.1';
+  testLimiter.reset(testKey);
+
+  const res1 = testLimiter.check(testKey);
+  const res2 = testLimiter.check(testKey);
+  const res3 = testLimiter.check(testKey);
+  const res4 = testLimiter.check(testKey); // Exceeds max: 3
+
+  if (!res1.allowed || !res2.allowed || !res3.allowed) {
+    throw new Error('Legitimate requests within limit were incorrectly blocked');
+  }
+  if (res4.allowed) {
+    throw new Error('Request exceeding rate limit threshold was incorrectly permitted');
+  }
+  if (res4.retryAfterSeconds < 1) {
+    throw new Error('Blocked rate limit check missing valid retryAfterSeconds');
+  }
+  if (res3.remaining !== 0) {
+    throw new Error(`Expected remaining hits to reach 0 on 3rd request, got: ${res3.remaining}`);
+  }
+  console.log('  ✅ Sliding-Window Algorithm: Permits requests up to threshold and blocks excess with Retry-After');
+
+  // 2. Test IP Isolation: Key A being blocked does not block Key B
+  const otherKey = 'test-ip-10.0.0.99';
+  const otherRes = testLimiter.check(otherKey);
+  if (!otherRes.allowed) {
+    throw new Error('Rate limiting on one IP incorrectly leaked to a different IP');
+  }
+  console.log('  ✅ Key Isolation: Rate limiting on one client IP does not affect separate client IPs');
+
+  // 3. Test Express HTTP Middleware & Headers
+  let statusCode = 200;
+  let responseData = null;
+  const sentHeaders = {};
+  const mockReq = { headers: {}, socket: { remoteAddress: testKey } };
+  const mockRes = {
+    setHeader(key, val) { sentHeaders[key.toLowerCase()] = val; },
+    status(code) { statusCode = code; return this; },
+    json(data) { responseData = data; return this; }
+  };
+  let nextInvoked = false;
+
+  testLimiter.middleware()(mockReq, mockRes, () => { nextInvoked = true; });
+
+  if (nextInvoked) {
+    throw new Error('Middleware called next() when rate limit was exceeded');
+  }
+  if (statusCode !== 429) {
+    throw new Error(`Expected HTTP 429 Too Many Requests, got: ${statusCode}`);
+  }
+  if (!sentHeaders['retry-after'] || !sentHeaders['ratelimit-limit']) {
+    throw new Error('Rate-limited HTTP response missing RateLimit-Limit or Retry-After header');
+  }
+  if (!responseData?.error) {
+    throw new Error('429 response missing JSON error message');
+  }
+  console.log('  ✅ HTTP 429 Enforcement: Returns 429 Too Many Requests with RFC headers (Retry-After, RateLimit-*)');
+
+  // 4. Test Socket Handshake Rate Limiter
+  const socketIpKey = 'socket-test-ip-192.168.1.100';
+  socketHandshakeLimiter.reset(socketIpKey);
+
+  for (let i = 0; i < 30; i++) {
+    const check = socketHandshakeLimiter.check(socketIpKey);
+    if (!check.allowed) {
+      throw new Error(`Socket handshake incorrectly blocked at iteration ${i + 1}`);
+    }
+  }
+  const socketBlocked = socketHandshakeLimiter.check(socketIpKey);
+  if (socketBlocked.allowed) {
+    throw new Error('Socket handshake connection storm exceeded threshold but was not blocked');
+  }
+  console.log('  ✅ Socket.IO Handshake Throttling: Blocks connection flooding from spammed client IPs');
+
+  // 5. Test Socket Message Emission Rate Limiter
+  const socketId = 'socket_mock_client_id_42';
+  socketMessageLimiter.reset(socketId);
+
+  for (let i = 0; i < 10; i++) {
+    const check = socketMessageLimiter.check(socketId);
+    if (!check.allowed) {
+      throw new Error(`Socket message emit incorrectly blocked at iteration ${i + 1}`);
+    }
+  }
+  const msgBlocked = socketMessageLimiter.check(socketId);
+  if (msgBlocked.allowed) {
+    throw new Error('Socket rapid message spam was not blocked by socketMessageLimiter');
+  }
+  console.log('  ✅ Real-time Message Throttling: Blocks message flood spam per connected socket');
+
+  // Clean up
+  testLimiter.destroy();
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -838,6 +951,7 @@ async function runAllTests() {
     await testSafetyNumberAndMitmDefense();
     await testEncryptedKeyStoreAndNonExtractableKeys();
     await testHttpSecurityHeadersAndRestrictedCors();
+    await testRateLimitingAndBruteForceProtection();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');

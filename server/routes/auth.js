@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { db } from '../config/db.js';
 import { generateToken, authMiddleware, JWT_SECRET } from '../middleware/auth.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ export function verifyAuthVerifier(storedVerifier, clientVerifier) {
 }
 
 // Register
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter.middleware(), async (req, res) => {
   try {
     const { username, auth_verifier, public_key, encrypted_priv_key, salt, iv, avatar_color } = req.body;
 
@@ -90,7 +91,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Pre-login (Returns only public key derivation salt; zero key exposure & anti-enumeration)
-router.post('/pre-login', async (req, res) => {
+router.post('/pre-login', authLimiter.middleware(), async (req, res) => {
   try {
     const { username } = req.body;
     if (!username) {
@@ -126,7 +127,7 @@ router.post('/pre-login', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter.middleware(), async (req, res) => {
   try {
     const { username, auth_verifier } = req.body;
     if (!username || !auth_verifier) {

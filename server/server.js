@@ -12,6 +12,7 @@ import chatRoutes from './routes/chat.js';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
 import { securityHeadersMiddleware, corsOptions, isOriginAllowed } from './middleware/security.js';
+import { apiLimiter, socketHandshakeLimiter, socketMessageLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
@@ -43,6 +44,9 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Global API rate limiting
+app.use('/api', apiLimiter.middleware());
+
 // Static assets
 const publicPath = path.join(__dirname, '../public');
 app.use(express.static(publicPath));
@@ -70,6 +74,12 @@ const onlineUsers = new Map();
 
 // Socket.IO Handshake Authentication Middleware
 io.use((socket, next) => {
+  // Handshake connection rate limiting
+  const handshakeLimit = socketHandshakeLimiter.check(socket);
+  if (!handshakeLimit.allowed) {
+    return next(new Error('Rate limit exceeded: Too many socket connections.'));
+  }
+
   const token = socket.handshake.auth?.token || 
     (socket.handshake.headers?.authorization?.startsWith('Bearer ') 
       ? socket.handshake.headers.authorization.substring(7) 
@@ -183,6 +193,15 @@ io.on('connection', (socket) => {
   // Messages (enforce verified senderId and participant authorization)
   socket.on('send_message', async (messageData, callback) => {
     try {
+      // Message emission rate limiting per socket
+      const msgLimit = socketMessageLimiter.check(socket.id);
+      if (!msgLimit.allowed) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Rate limit exceeded: You are sending messages too fast. Please slow down.' });
+        }
+        return;
+      }
+
       const { conversationId, ciphertext, iv, senderPublicKey, mediaUrl, mediaType } = messageData;
       const senderId = socket.user.id; // Enforce verified identity
 

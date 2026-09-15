@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { searchLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Search users
-router.get('/users/search', async (req, res) => {
+router.get('/users/search', searchLimiter.middleware(), async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.trim().length < 1) {
