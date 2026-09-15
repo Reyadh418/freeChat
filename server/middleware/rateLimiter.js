@@ -2,6 +2,8 @@
  * Zero-Dependency Sliding-Window Rate Limiter for Express & Socket.IO
  */
 
+import net from 'net';
+
 export class SlidingWindowRateLimiter {
   constructor({ windowMs = 60000, max = 60, message = 'Too many requests.', keyGenerator = null }) {
     this.windowMs = windowMs;
@@ -91,18 +93,35 @@ export class SlidingWindowRateLimiter {
   }
 }
 
+/**
+ * Extracts and validates the client IP.
+ * Defends against IP spoofing: X-Forwarded-For is ONLY trusted if TRUST_PROXY is enabled,
+ * and the extracted IP must be a valid IPv4/IPv6 address.
+ */
 export function getClientIp(req) {
-  const forwarded = req.headers?.['x-forwarded-for'];
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  const isTrustProxy = process.env.TRUST_PROXY === 'true' || Boolean(req?.app?.get?.('trust proxy'));
+  if (isTrustProxy) {
+    const forwarded = req.headers?.['x-forwarded-for'];
+    if (forwarded && typeof forwarded === 'string') {
+      const candidate = forwarded.split(',')[0].trim();
+      if (net.isIP(candidate)) {
+        return candidate;
+      }
+    }
   }
   return req.socket?.remoteAddress || req.ip || '127.0.0.1';
 }
 
 export function getSocketIp(socket) {
-  const forwarded = socket.handshake?.headers?.['x-forwarded-for'];
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  const isTrustProxy = process.env.TRUST_PROXY === 'true';
+  if (isTrustProxy) {
+    const forwarded = socket.handshake?.headers?.['x-forwarded-for'];
+    if (forwarded && typeof forwarded === 'string') {
+      const candidate = forwarded.split(',')[0].trim();
+      if (net.isIP(candidate)) {
+        return candidate;
+      }
+    }
   }
   return socket.handshake?.address || socket.conn?.remoteAddress || '127.0.0.1';
 }
@@ -128,7 +147,14 @@ export const searchLimiter = new SlidingWindowRateLimiter({
   message: 'Too many search requests. Please slow down.'
 });
 
-// 4. Socket Handshake Limiter: 30 connection attempts per minute per IP
+// 4. Conversation Creation Limiter: 15 conversations per 15 minutes per IP
+export const convLimiter = new SlidingWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: 'Too many conversation creations. Please slow down.'
+});
+
+// 5. Socket Handshake Limiter: 30 connection attempts per minute per IP
 export const socketHandshakeLimiter = new SlidingWindowRateLimiter({
   windowMs: 60 * 1000,
   max: 30,
@@ -136,10 +162,18 @@ export const socketHandshakeLimiter = new SlidingWindowRateLimiter({
   keyGenerator: (socket) => getSocketIp(socket)
 });
 
-// 5. Socket Message Limiter: 10 messages per 2 seconds per socket
+// 6. Socket Message Limiter: 10 messages per 2 seconds per socket
 export const socketMessageLimiter = new SlidingWindowRateLimiter({
   windowMs: 2000,
   max: 10,
   message: 'You are sending messages too fast. Please slow down.',
+  keyGenerator: (socket) => socket.id
+});
+
+// 7. Socket Typing Indicator Limiter: 10 events per 5 seconds per socket
+export const socketTypingLimiter = new SlidingWindowRateLimiter({
+  windowMs: 5000,
+  max: 10,
+  message: 'Typing indicators sent too rapidly.',
   keyGenerator: (socket) => socket.id
 });

@@ -3,11 +3,23 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'freechat_dev_fallback_secret_key_change_in_prod';
+export const DEFAULT_DEV_JWT_SECRET = 'freechat_dev_fallback_secret_key_change_in_prod';
 
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  console.warn('[SECURITY WARNING]: JWT_SECRET is not set in production! Using fallback.');
+/**
+ * Validates JWT configuration. In production environments, using an empty
+ * or default dev secret key is strictly prohibited to prevent token forgery.
+ */
+export function validateJwtSecretConfig(secret = process.env.JWT_SECRET, env = process.env.NODE_ENV) {
+  const effectiveSecret = secret || DEFAULT_DEV_JWT_SECRET;
+  if (env === 'production') {
+    if (!secret || secret === DEFAULT_DEV_JWT_SECRET || secret.length < 32) {
+      throw new Error('[FATAL SECURITY ERROR] Insecure or missing JWT_SECRET in production mode! Set a strong random secret with at least 32 characters in process.env.JWT_SECRET.');
+    }
+  }
+  return effectiveSecret;
 }
+
+export const JWT_SECRET = validateJwtSecretConfig();
 
 /**
  * Generate a signed JWT for an authenticated user.

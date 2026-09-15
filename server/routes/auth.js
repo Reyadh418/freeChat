@@ -46,9 +46,60 @@ router.post('/register', authLimiter.middleware(), async (req, res) => {
       return res.status(400).json({ error: 'Missing registration fields.' });
     }
 
+    if (
+      typeof username !== 'string' ||
+      typeof auth_verifier !== 'string' ||
+      typeof public_key !== 'string' ||
+      typeof encrypted_priv_key !== 'string' ||
+      typeof salt !== 'string' ||
+      typeof iv !== 'string'
+    ) {
+      return res.status(400).json({ error: 'Invalid field types: all registration credentials must be strings.' });
+    }
+
     const cleanUsername = username.trim().toLowerCase();
     if (!/^[a-z0-9_.-]{3,30}$/.test(cleanUsername)) {
       return res.status(400).json({ error: 'Username must be 3-30 characters long and contain only letters, numbers, underscores, dashes, or dots.' });
+    }
+
+    // Validate avatar_color if provided
+    let safeAvatarColor = '#007AFF';
+    if (avatar_color !== undefined && avatar_color !== null) {
+      if (typeof avatar_color !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(avatar_color)) {
+        return res.status(400).json({ error: 'Invalid avatar color format. Must be a valid hex color code (e.g. #007AFF).' });
+      }
+      safeAvatarColor = avatar_color;
+    }
+
+    // Validate size and format of cryptographic parameters
+    if (auth_verifier.length < 16 || auth_verifier.length > 256) {
+      return res.status(400).json({ error: 'Invalid auth verifier length.' });
+    }
+
+    if (salt.length < 10 || salt.length > 128) {
+      return res.status(400).json({ error: 'Invalid salt length.' });
+    }
+
+    if (iv.length < 10 || iv.length > 64) {
+      return res.status(400).json({ error: 'Invalid iv length.' });
+    }
+
+    if (encrypted_priv_key.length < 10 || encrypted_priv_key.length > 8192) {
+      return res.status(400).json({ error: 'Invalid encrypted private key length.' });
+    }
+
+    if (public_key.length < 10 || public_key.length > 2048) {
+      return res.status(400).json({ error: 'Invalid public key length.' });
+    }
+
+    // Validate that public_key is parseable and is an EC P-256 JWK
+    try {
+      const parsedKey = JSON.parse(public_key);
+      if (parsedKey.kty !== 'EC' || parsedKey.crv !== 'P-256') {
+        return res.status(400).json({ error: 'Invalid public key: must be an EC P-256 JWK.' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Invalid public key format: not valid JSON.' });
     }
 
     const existingUser = await db.getUserByUsername(cleanUsername);
@@ -66,7 +117,7 @@ router.post('/register', authLimiter.middleware(), async (req, res) => {
       encrypted_priv_key,
       salt,
       iv,
-      avatar_color
+      avatar_color: safeAvatarColor
     });
 
     const token = generateToken(user);
@@ -94,7 +145,7 @@ router.post('/register', authLimiter.middleware(), async (req, res) => {
 router.post('/pre-login', authLimiter.middleware(), async (req, res) => {
   try {
     const { username } = req.body;
-    if (!username) {
+    if (!username || typeof username !== 'string' || username.length > 50) {
       return res.status(400).json({ error: 'Username is required.' });
     }
 
@@ -130,7 +181,7 @@ router.post('/pre-login', authLimiter.middleware(), async (req, res) => {
 router.post('/login', authLimiter.middleware(), async (req, res) => {
   try {
     const { username, auth_verifier } = req.body;
-    if (!username || !auth_verifier) {
+    if (!username || !auth_verifier || typeof username !== 'string' || typeof auth_verifier !== 'string' || username.length > 50 || auth_verifier.length > 256) {
       return res.status(400).json({ error: 'Username and auth verifier are required.' });
     }
 

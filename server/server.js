@@ -12,7 +12,7 @@ import chatRoutes from './routes/chat.js';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
 import { securityHeadersMiddleware, corsOptions, isOriginAllowed } from './middleware/security.js';
-import { apiLimiter, socketHandshakeLimiter, socketMessageLimiter } from './middleware/rateLimiter.js';
+import { apiLimiter, socketHandshakeLimiter, socketMessageLimiter, socketTypingLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
@@ -25,6 +25,7 @@ app.disable('x-powered-by');
 const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
+  maxHttpBufferSize: 256 * 1024, // 256KB max WebSocket frame to prevent memory exhaustion
   cors: {
     origin: (origin, callback) => {
       if (isOriginAllowed(origin)) {
@@ -155,10 +156,13 @@ io.on('connection', (socket) => {
     socket.leave(`conv:${conversationId}`);
   });
 
-  // Typing Indicators (enforce verified identity and participant check)
+  // Typing Indicators (enforce verified identity, rate limits, and participant check)
   socket.on('typing_start', async ({ conversationId }) => {
     if (!conversationId) return;
     try {
+      const typingLimit = socketTypingLimiter.check(socket.id);
+      if (!typingLimit.allowed) return;
+
       const isParticipant = await db.isUserInConversation(conversationId, socket.user.id);
       if (!isParticipant) return;
 
@@ -190,9 +194,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Messages (enforce verified senderId and participant authorization)
+  // Messages (enforce verified senderId, payload bounds, and participant authorization)
   socket.on('send_message', async (messageData, callback) => {
     try {
+      if (!messageData || typeof messageData !== 'object') {
+        if (typeof callback === 'function') {
+          callback({ error: 'Invalid payload structure.' });
+        }
+        return;
+      }
+
       // Message emission rate limiting per socket
       const msgLimit = socketMessageLimiter.check(socket.id);
       if (!msgLimit.allowed) {
@@ -205,9 +216,44 @@ io.on('connection', (socket) => {
       const { conversationId, ciphertext, iv, senderPublicKey, mediaUrl, mediaType } = messageData;
       const senderId = socket.user.id; // Enforce verified identity
 
-      if (!conversationId || !ciphertext || !iv) {
+      // Strict type and size bounds to prevent memory bloat and injection attacks
+      if (
+        typeof conversationId !== 'string' ||
+        conversationId.length < 1 ||
+        conversationId.length > 128 ||
+        typeof ciphertext !== 'string' ||
+        ciphertext.length < 1 ||
+        ciphertext.length > 131072 || // Max 128KB ciphertext
+        typeof iv !== 'string' ||
+        iv.length < 1 ||
+        iv.length > 64
+      ) {
         if (typeof callback === 'function') {
-          callback({ error: 'Missing payload.' });
+          callback({ error: 'Invalid message payload format or payload exceeds maximum allowed size.' });
+        }
+        return;
+      }
+
+      if (senderPublicKey && (typeof senderPublicKey !== 'string' || senderPublicKey.length > 2048)) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Invalid senderPublicKey: must be string under 2KB.' });
+        }
+        return;
+      }
+
+      if (mediaUrl) {
+        // Enforce strictly http or https schemes (preventing javascript: or data: script injection)
+        if (typeof mediaUrl !== 'string' || mediaUrl.length > 2048 || !/^https?:\/\/[^\s$.?#].[^\s]*$/i.test(mediaUrl)) {
+          if (typeof callback === 'function') {
+            callback({ error: 'Invalid mediaUrl: must be a valid HTTP or HTTPS URL under 2KB.' });
+          }
+          return;
+        }
+      }
+
+      if (mediaType && (typeof mediaType !== 'string' || mediaType.length > 64)) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Invalid mediaType format.' });
         }
         return;
       }

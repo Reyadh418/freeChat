@@ -1104,6 +1104,140 @@ async function testLocalStorageAtomicWritesAndConcurrency() {
   }
 }
 
+// 15. Deep Hardening & Input Validation Test
+async function testDeepHardeningAndInputValidation() {
+  console.log('\n[15/15] Testing Deep Hardening, IP Anti-Spoofing & Input Validation Controls...');
+
+  const { getClientIp, getSocketIp, socketTypingLimiter } = await import('../server/middleware/rateLimiter.js');
+  const { validateJwtSecretConfig, DEFAULT_DEV_JWT_SECRET } = await import('../server/middleware/auth.js');
+  const authRouter = (await import('../server/routes/auth.js')).default;
+
+  // 1. Test IP Anti-Spoofing
+  delete process.env.TRUST_PROXY;
+  const spoofedReq = {
+    headers: { 'x-forwarded-for': '198.51.100.99, 10.0.0.1' },
+    socket: { remoteAddress: '203.0.113.50' }
+  };
+  const resolvedUntrustedIp = getClientIp(spoofedReq);
+  if (resolvedUntrustedIp !== '203.0.113.50') {
+    throw new Error(`IP Spoofing defense failed! Expected socket IP 203.0.113.50, but got spoofed header: ${resolvedUntrustedIp}`);
+  }
+
+  process.env.TRUST_PROXY = 'true';
+  const resolvedTrustedIp = getClientIp(spoofedReq);
+  if (resolvedTrustedIp !== '198.51.100.99') {
+    throw new Error(`Trusted proxy IP resolution failed! Expected 198.51.100.99, got: ${resolvedTrustedIp}`);
+  }
+
+  // Spoofing invalid non-IP string through trusted proxy
+  const invalidIpReq = {
+    headers: { 'x-forwarded-for': 'not-a-valid-ip-address' },
+    socket: { remoteAddress: '203.0.113.50' }
+  };
+  const resolvedFallbackIp = getClientIp(invalidIpReq);
+  if (resolvedFallbackIp !== '203.0.113.50') {
+    throw new Error(`Invalid IP candidate was not safely rejected! Got: ${resolvedFallbackIp}`);
+  }
+  delete process.env.TRUST_PROXY;
+  console.log('  ✅ IP Anti-Spoofing Defense: Untrusted X-Forwarded-For headers rejected; net.isIP strictly enforced');
+
+  // 2. Test Fail-Secure Production JWT Secret Validation
+  let caughtDevSecret = false;
+  try {
+    validateJwtSecretConfig(DEFAULT_DEV_JWT_SECRET, 'production');
+  } catch {
+    caughtDevSecret = true;
+  }
+  if (!caughtDevSecret) {
+    throw new Error('validateJwtSecretConfig failed to block fallback secret in production mode');
+  }
+
+  let caughtMissingSecret = false;
+  try {
+    validateJwtSecretConfig('', 'production');
+  } catch {
+    caughtMissingSecret = true;
+  }
+  if (!caughtMissingSecret) {
+    throw new Error('validateJwtSecretConfig failed to block empty secret in production mode');
+  }
+
+  const validProdSecret = validateJwtSecretConfig('a-strong-random-production-jwt-secret-key-that-is-long-enough-for-security', 'production');
+  if (!validProdSecret) {
+    throw new Error('validateJwtSecretConfig rejected valid production secret');
+  }
+  console.log('  ✅ Fail-Secure Production JWT Secret: Insecure fallback secrets strictly refused in production mode');
+
+  // 3. Test Registration Route Schema & Validation Rejections
+  const registerHandler = authRouter.stack.find(s => s.route?.path === '/register')?.route?.stack?.slice(-1)[0]?.handle;
+  if (!registerHandler) {
+    throw new Error('Could not locate /register route handler');
+  }
+
+  // Test invalid avatar_color rejection
+  let avatarStatusCode = 200;
+  let avatarErrorMsg = '';
+  await registerHandler(
+    {
+      body: {
+        username: `test_reg_${Date.now()}`,
+        auth_verifier: 'a'.repeat(32),
+        public_key: JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'mock_x', y: 'mock_y' }),
+        encrypted_priv_key: 'b'.repeat(32),
+        salt: 'c'.repeat(24),
+        iv: 'd'.repeat(16),
+        avatar_color: 'javascript:alert(1)' // Malicious avatar color
+      }
+    },
+    {
+      status(code) { avatarStatusCode = code; return this; },
+      json(data) { avatarErrorMsg = data.error; return this; }
+    }
+  );
+  if (avatarStatusCode !== 400 || !avatarErrorMsg.includes('avatar color')) {
+    throw new Error(`Failed to reject malicious avatar_color with 400. Got status: ${avatarStatusCode}, error: ${avatarErrorMsg}`);
+  }
+
+  // Test malformed public_key (not valid EC P-256 JWK)
+  let keyStatusCode = 200;
+  let keyErrorMsg = '';
+  await registerHandler(
+    {
+      body: {
+        username: `test_reg_${Date.now()}`,
+        auth_verifier: 'a'.repeat(32),
+        public_key: 'not-valid-json-junk',
+        encrypted_priv_key: 'b'.repeat(32),
+        salt: 'c'.repeat(24),
+        iv: 'd'.repeat(16)
+      }
+    },
+    {
+      status(code) { keyStatusCode = code; return this; },
+      json(data) { keyErrorMsg = data.error; return this; }
+    }
+  );
+  if (keyStatusCode !== 400 || !keyErrorMsg.includes('public key')) {
+    throw new Error(`Failed to reject invalid public_key JWK with 400. Got status: ${keyStatusCode}, error: ${keyErrorMsg}`);
+  }
+  console.log('  ✅ Registration Schema Hardening: Rejects malformed avatar_color, invalid public key formats, and non-string credentials');
+
+  // 4. Test Socket Typing Throttling
+  const socketId = 'typing_test_socket_id';
+  socketTypingLimiter.reset(socketId);
+  for (let i = 0; i < 10; i++) {
+    const check = socketTypingLimiter.check(socketId);
+    if (!check.allowed) {
+      throw new Error(`Typing event incorrectly throttled at iteration ${i + 1}`);
+    }
+  }
+  const blockedTyping = socketTypingLimiter.check(socketId);
+  if (blockedTyping.allowed) {
+    throw new Error('Typing indicator flood exceeded limit but was not throttled');
+  }
+  console.log('  ✅ Real-time Typing Throttling: Blocks room flooding from rapid typing emissions');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -1120,6 +1254,7 @@ async function runAllTests() {
     await testRateLimitingAndBruteForceProtection();
     await testDatabaseRowLevelSecuritySchema();
     await testLocalStorageAtomicWritesAndConcurrency();
+    await testDeepHardeningAndInputValidation();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');

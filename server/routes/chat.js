@@ -1,7 +1,7 @@
 import express from 'express';
 import { db } from '../config/db.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { searchLimiter } from '../middleware/rateLimiter.js';
+import { searchLimiter, convLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -37,8 +37,8 @@ router.get('/conversations', async (req, res) => {
   }
 });
 
-// Direct chat (initiator is always authenticated user)
-router.post('/conversations/direct', async (req, res) => {
+// Direct chat (initiator is always authenticated user, rate-limited against flooding)
+router.post('/conversations/direct', convLimiter.middleware(), async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { targetUsername } = req.body;
