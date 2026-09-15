@@ -1,6 +1,7 @@
 import express from 'express';
+import crypto from 'crypto';
 import { db } from '../config/db.js';
-import { generateToken, authMiddleware } from '../middleware/auth.js';
+import { generateToken, authMiddleware, JWT_SECRET } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -54,7 +55,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Pre-login
+// Pre-login (Returns only public key derivation salt; zero key exposure & anti-enumeration)
 router.post('/pre-login', async (req, res) => {
   try {
     const { username } = req.body;
@@ -62,15 +63,26 @@ router.post('/pre-login', async (req, res) => {
       return res.status(400).json({ error: 'Username is required.' });
     }
 
-    const user = await db.getUserByUsername(username.trim().toLowerCase());
+    const cleanUsername = username.trim().toLowerCase();
+    const user = await db.getUserByUsername(cleanUsername);
+
     if (!user) {
-      return res.status(404).json({ error: 'Account not found.' });
+      // Anti-enumeration: Return a deterministic pseudorandom 16-byte salt for non-existent users
+      // This ensures identical HTTP status (200 OK) and response timing, preventing username enumeration.
+      const fakeSalt = crypto
+        .createHmac('sha256', JWT_SECRET)
+        .update(`fake-salt:${cleanUsername}`)
+        .digest()
+        .subarray(0, 16)
+        .toString('base64');
+
+      return res.json({ salt: fakeSalt });
     }
 
+    // Never return encrypted_priv_key or iv to unauthenticated callers!
+    // Encrypted private keys are only returned within authorized /login response.
     res.json({
-      salt: user.salt,
-      iv: user.iv,
-      encrypted_priv_key: user.encrypted_priv_key
+      salt: user.salt
     });
   } catch (err) {
     console.error('[Auth Error]:', err);
@@ -140,8 +152,8 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Profile
-router.get('/user/:username', async (req, res) => {
+// Profile (Authenticated users only)
+router.get('/user/:username', authMiddleware, async (req, res) => {
   try {
     const user = await db.getUserByUsername(req.params.username.trim().toLowerCase());
     if (!user) {

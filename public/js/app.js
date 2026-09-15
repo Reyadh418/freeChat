@@ -254,14 +254,16 @@ async function handleAuthSubmit(e) {
       const masterKey = await deriveMasterKey(password, saltBuffer);
       const authVerifier = await deriveAuthVerifier(password, preLogin.salt);
 
+      elements.authCryptoStatus.textContent = '🔐 Authenticating...';
+      const loginRes = await API.login(username, authVerifier);
+
       elements.authCryptoStatus.textContent = '🔓 Decrypting Private Key...';
       const privateKey = await decryptPrivateKeyBackup(
-        preLogin.encrypted_priv_key,
-        preLogin.iv,
+        loginRes.user.encrypted_priv_key,
+        loginRes.user.iv,
         masterKey
       );
 
-      const loginRes = await API.login(username, authVerifier);
       const publicKey = await importPublicKey(loginRes.user.public_key);
       await KeyStore.saveUserKeys(loginRes.user.id, privateKey, publicKey);
 

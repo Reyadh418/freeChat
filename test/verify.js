@@ -420,6 +420,91 @@ async function testSocketIoSecurity() {
   console.log('  ✅ Identity Spoofing Blocked: Server strictly binds sender_id to authenticated socket identity');
 }
 
+// 7. Pre-Login Anti-Enumeration & Private Key Privacy Tests
+async function testPreLoginAntiEnumerationAndKeyPrivacy() {
+  console.log('\n[7/7] Testing Pre-Login Anti-Enumeration & Zero Unauthenticated Key Exposure...');
+  const { db } = await import('../server/config/db.js');
+  const authRouter = (await import('../server/routes/auth.js')).default;
+  const { generateToken } = await import('../server/middleware/auth.js');
+
+  const username = `privacy_user_${Date.now()}`;
+  const mockSalt = 'mock_salt_base64_val';
+  const mockIv = 'mock_iv_base64_val';
+  const mockEncPrivKey = 'mock_encrypted_private_key_base64';
+
+  const user = await db.createUser({
+    username,
+    auth_verifier: 'mock_verifier',
+    public_key: '{"kty":"EC","crv":"P-256"}',
+    encrypted_priv_key: mockEncPrivKey,
+    salt: mockSalt,
+    iv: mockIv,
+    avatar_color: '#007AFF'
+  });
+
+  // Helper to execute router handler
+  function simulateRoute(method, path, body = {}, headers = {}) {
+    return new Promise((resolve) => {
+      let statusCode = 200;
+      const req = {
+        method,
+        url: path,
+        body,
+        headers,
+        params: {}
+      };
+      const res = {
+        status(code) { statusCode = code; return this; },
+        json(data) { resolve({ status: statusCode, data }); },
+        send(data) { resolve({ status: statusCode, data }); }
+      };
+
+      authRouter.handle(req, res, (err) => {
+        resolve({ status: err ? 500 : 404, error: err });
+      });
+    });
+  }
+
+  // 1. Existing user pre-login: MUST return salt, MUST NOT expose encrypted_priv_key or iv
+  const existingPreLogin = await simulateRoute('POST', '/pre-login', { username });
+  if (existingPreLogin.status !== 200) {
+    throw new Error(`Expected 200 from pre-login, got ${existingPreLogin.status}`);
+  }
+  if (!existingPreLogin.data.salt || existingPreLogin.data.salt !== mockSalt) {
+    throw new Error('Pre-login failed to return user salt');
+  }
+  if (existingPreLogin.data.encrypted_priv_key !== undefined) {
+    throw new Error('CRITICAL: Pre-login exposed encrypted_priv_key to unauthenticated caller!');
+  }
+  if (existingPreLogin.data.iv !== undefined) {
+    throw new Error('CRITICAL: Pre-login exposed IV to unauthenticated caller!');
+  }
+  console.log('  ✅ Private Key Concealment: Pre-login returns salt only, zero encrypted keys exposed');
+
+  // 2. Non-existent user pre-login: MUST return 200 with pseudorandom salt, preventing user enumeration
+  const nonExistentPreLogin = await simulateRoute('POST', '/pre-login', { username: 'ghost_user_nonexistent_123' });
+  if (nonExistentPreLogin.status !== 200) {
+    throw new Error(`Expected 200 from non-existent pre-login to prevent enumeration, got ${nonExistentPreLogin.status}`);
+  }
+  if (!nonExistentPreLogin.data.salt || typeof nonExistentPreLogin.data.salt !== 'string') {
+    throw new Error('Pre-login did not return a pseudorandom salt for non-existent user');
+  }
+  console.log('  ✅ Anti-Enumeration: Non-existent accounts return identical 200 OK with pseudorandom salt');
+
+  // 3. User profile endpoint protection: MUST reject unauthenticated requests
+  const unauthProfile = await simulateRoute('GET', `/user/${username}`);
+  if (unauthProfile.status !== 401) {
+    throw new Error(`Expected 401 for unauthenticated profile lookup, got ${unauthProfile.status}`);
+  }
+
+  const token = generateToken(user);
+  const authProfile = await simulateRoute('GET', `/user/${username}`, {}, { authorization: `Bearer ${token}` });
+  if (authProfile.status !== 200 || authProfile.data.username !== username) {
+    throw new Error('Authenticated profile request failed');
+  }
+  console.log('  ✅ Profile Endpoint Protection: Public scraping blocked, authenticated access allowed');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -428,6 +513,7 @@ async function runAllTests() {
     await testValidationRules();
     await testApiAuthenticationAndIdor();
     await testSocketIoSecurity();
+    await testPreLoginAntiEnumerationAndKeyPrivacy();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
