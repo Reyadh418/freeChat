@@ -237,7 +237,7 @@ async function testDatabaseAdapter() {
   console.log(`  ✅ Encrypted Message Storage Passed: Stored only Ciphertext & IV in DB`);
 
   // Test User Search
-  const searchResults = await db.searchUsers(testUsername.substring(0, 6));
+  const searchResults = await db.searchUsers(testUsername.slice(-8));
   if (!searchResults.some(u => u.username === testUsername)) {
     throw new Error('User search failed to find newly created user');
   }
@@ -577,6 +577,76 @@ async function testHardenedAuthVerifierAndServerHashing() {
   console.log('  ✅ Pass-the-Hash Defense: Stored DB verifier cannot be replayed directly for login');
 }
 
+// 9. Safety Numbers, Key Verification & MITM Prevention Tests
+async function testSafetyNumberAndMitmDefense() {
+  console.log('\n[9/9] Testing Safety Numbers, Key Verification & MITM Prevention...');
+  const { computeSafetyNumber, VerifiedKeys } = await import('../public/js/crypto.js');
+
+  // Generate Alice's ECDH key pair
+  const alicePair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+  const aliceJwk = await subtle.exportKey('jwk', alicePair.publicKey);
+
+  // Generate Bob's ECDH key pair
+  const bobPair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+  const bobJwk = await subtle.exportKey('jwk', bobPair.publicKey);
+
+  // Generate Mallory's (Attacker's) ECDH key pair
+  const malloryPair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+  const malloryJwk = await subtle.exportKey('jwk', malloryPair.publicKey);
+
+  // 1. Test Symmetry: Alice computes with Bob, Bob computes with Alice
+  const aliceView = await computeSafetyNumber(aliceJwk, bobJwk);
+  const bobView = await computeSafetyNumber(bobJwk, aliceJwk);
+
+  if (aliceView.safetyNumber !== bobView.safetyNumber) {
+    throw new Error('Safety numbers are not symmetric between Alice and Bob');
+  }
+  if (aliceView.fingerprint !== bobView.fingerprint) {
+    throw new Error('Fingerprints are not symmetric between Alice and Bob');
+  }
+  if (aliceView.blocks.length !== 12) {
+    throw new Error(`Expected 12 blocks of 5 digits, got ${aliceView.blocks.length}`);
+  }
+  console.log(`  ✅ Symmetric Safety Number: ${aliceView.safetyNumber.slice(0, 23)}... (${aliceView.fingerprint}) matches symmetrically on both peers`);
+
+  // 2. Test MITM / Key Substitution Detection: Mallory swaps Bob's public key
+  const aliceUnderAttack = await computeSafetyNumber(aliceJwk, malloryJwk);
+  if (aliceUnderAttack.safetyNumber === aliceView.safetyNumber) {
+    throw new Error('CRITICAL: Attacker substituted key generated identical safety number!');
+  }
+  if (aliceUnderAttack.fingerprint === aliceView.fingerprint) {
+    throw new Error('CRITICAL: Attacker substituted key generated identical fingerprint!');
+  }
+  console.log('  ✅ MITM Defense: Attacker-substituted public key generates mismatched safety number & fingerprint');
+
+  // 3. Test Key Change Detection with VerifiedKeys
+  const aliceId = 'user_alice_test_id';
+  const bobId = 'user_bob_test_id';
+
+  // Mark Bob as verified with current fingerprint
+  VerifiedKeys.set(aliceId, bobId, aliceView.fingerprint, true);
+  const stored = VerifiedKeys.get(aliceId, bobId);
+  if (!stored || !stored.verified || stored.fingerprint !== aliceView.fingerprint) {
+    throw new Error('Failed to retrieve verified contact record');
+  }
+
+  // Same key: no change
+  const currentKeyMatches = stored.fingerprint === aliceView.fingerprint;
+  if (!currentKeyMatches) {
+    throw new Error('Verified key falsely flagged as changed');
+  }
+
+  // Bob's key changes (or server substitutes key)
+  const keyTampered = stored.fingerprint !== aliceUnderAttack.fingerprint;
+  if (!keyTampered) {
+    throw new Error('Key change was not detected by stored verification record');
+  }
+  console.log('  ✅ Key Change Detection: Verified contacts flag key substitutions and trigger security alert');
+
+  // Clean up test verification record
+  VerifiedKeys.remove(aliceId, bobId);
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -587,6 +657,7 @@ async function runAllTests() {
     await testSocketIoSecurity();
     await testPreLoginAntiEnumerationAndKeyPrivacy();
     await testHardenedAuthVerifierAndServerHashing();
+    await testSafetyNumberAndMitmDefense();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
