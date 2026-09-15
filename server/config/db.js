@@ -57,7 +57,42 @@ if (!fs.existsSync(dbDir)) {
 }
 const localDbPath = path.join(dbDir, 'local_db.json');
 
-function loadLocalData() {
+let writeLockChain = Promise.resolve();
+
+/**
+ * Async mutex queue ensuring serialized read-modify-write operations
+ * on the local JSON file to prevent race conditions and lost updates.
+ */
+export function withWriteLock(fn) {
+  const next = writeLockChain.then(async () => {
+    return await fn();
+  });
+  writeLockChain = next.catch(() => {});
+  return next;
+}
+
+/**
+ * Performs atomic file replacement to ensure zero data truncation or corruption
+ * during unexpected server terminations or concurrent operations.
+ */
+export function saveLocalData(data) {
+  const json = JSON.stringify(data, null, 2);
+  const tempPath = `${localDbPath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
+  fs.writeFileSync(tempPath, json, 'utf-8');
+  try {
+    fs.renameSync(tempPath, localDbPath);
+  } catch (err) {
+    // Windows file-lock fallback (e.g. indexer or antivirus lock)
+    try {
+      fs.copyFileSync(tempPath, localDbPath);
+      fs.unlinkSync(tempPath);
+    } catch {
+      throw err;
+    }
+  }
+}
+
+export function loadLocalData() {
   if (!fs.existsSync(localDbPath)) {
     const initial = {
       users: [],
@@ -65,22 +100,20 @@ function loadLocalData() {
       conversation_participants: [],
       messages: []
     };
-    fs.writeFileSync(localDbPath, JSON.stringify(initial, null, 2), 'utf-8');
+    saveLocalData(initial);
     return initial;
   }
   try {
     return JSON.parse(fs.readFileSync(localDbPath, 'utf-8'));
-  } catch {
+  } catch (err) {
+    console.error('[DATABASE CORRUPTION DETECTED] Failed to parse local_db.json:', err.message);
+    try {
+      const corruptBackup = path.join(dbDir, `local_db.corrupt.${Date.now()}.json`);
+      fs.copyFileSync(localDbPath, corruptBackup);
+      console.warn(`[DATABASE RECOVERY] Corrupt database safely backed up to: ${corruptBackup}`);
+    } catch {}
     return { users: [], conversations: [], conversation_participants: [], messages: [] };
   }
-}
-
-function saveLocalData(data) {
-  fs.writeFileSync(localDbPath, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-if (isSupabaseConfigured) {
-  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 }
 
 export const db = {
@@ -186,10 +219,12 @@ export const db = {
       if (error) throw error;
       return data;
     } else {
-      const data = loadLocalData();
-      data.users.push(newUser);
-      saveLocalData(data);
-      return newUser;
+      return await withWriteLock(() => {
+        const data = loadLocalData();
+        data.users.push(newUser);
+        saveLocalData(data);
+        return newUser;
+      });
     }
   },
 
@@ -266,18 +301,20 @@ export const db = {
 
       return conv;
     } else {
-      const data = loadLocalData();
-      data.conversations.push(newConv);
-      for (const uid of participantIds) {
-        data.conversation_participants.push({
-          conversation_id: id,
-          user_id: uid,
-          role: uid === created_by ? 'owner' : 'member',
-          joined_at: now
-        });
-      }
-      saveLocalData(data);
-      return newConv;
+      return await withWriteLock(() => {
+        const data = loadLocalData();
+        data.conversations.push(newConv);
+        for (const uid of participantIds) {
+          data.conversation_participants.push({
+            conversation_id: id,
+            user_id: uid,
+            role: uid === created_by ? 'owner' : 'member',
+            joined_at: now
+          });
+        }
+        saveLocalData(data);
+        return newConv;
+      });
     }
   },
 
@@ -428,14 +465,16 @@ export const db = {
 
       return data;
     } else {
-      const data = loadLocalData();
-      data.messages.push(newMsg);
-      const conv = data.conversations.find(c => c.id === conversation_id);
-      if (conv) {
-        conv.updated_at = now;
-      }
-      saveLocalData(data);
-      return newMsg;
+      return await withWriteLock(() => {
+        const data = loadLocalData();
+        data.messages.push(newMsg);
+        const conv = data.conversations.find(c => c.id === conversation_id);
+        if (conv) {
+          conv.updated_at = now;
+        }
+        saveLocalData(data);
+        return newMsg;
+      });
     }
   },
 
@@ -463,12 +502,14 @@ export const db = {
     if (isSupabaseConfigured) {
       await supabase.from('users').update({ last_seen: now }).eq('id', userId);
     } else {
-      const data = loadLocalData();
-      const user = data.users.find(u => u.id === userId);
-      if (user) {
-        user.last_seen = now;
-        saveLocalData(data);
-      }
+      return await withWriteLock(() => {
+        const data = loadLocalData();
+        const user = data.users.find(u => u.id === userId);
+        if (user) {
+          user.last_seen = now;
+          saveLocalData(data);
+        }
+      });
     }
   }
 };

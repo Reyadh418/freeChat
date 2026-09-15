@@ -1018,6 +1018,92 @@ async function testDatabaseRowLevelSecuritySchema() {
   console.log('  ✅ Service Role Authorization: Permits verified service_role key for backend operations');
 }
 
+// 14. Local File Storage Atomic Writes & Concurrency Safety Test
+async function testLocalStorageAtomicWritesAndConcurrency() {
+  console.log('\n[14/14] Testing Local File Storage Atomic Writes & Concurrency Safety...');
+
+  const fs = await import('fs');
+  const path = await import('path');
+  const { fileURLToPath } = await import('url');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const dbDir = path.join(__dirname, '../database');
+  const localDbPath = path.join(dbDir, 'local_db.json');
+
+  const { db, saveLocalData, loadLocalData } = await import('../server/config/db.js');
+
+  // 1. Verify Atomic Save: Saves valid JSON without leftover .tmp files
+  const currentData = loadLocalData();
+  saveLocalData(currentData);
+
+  const filesInDb = fs.readdirSync(dbDir);
+  const tempFiles = filesInDb.filter(f => f.includes('.tmp.'));
+  if (tempFiles.length > 0) {
+    throw new Error(`Leftover atomic temporary files found in database directory: ${tempFiles.join(', ')}`);
+  }
+  console.log('  ✅ Atomic Replacement: Writes through temporary file and renames cleanly with zero orphan temp files');
+
+  // 2. Test Concurrency: Run 25 simultaneous writes with withWriteLock
+  const testConvId = `conv_concurrency_test_${Date.now()}`;
+  const totalParallelWrites = 25;
+
+  const testUser = await db.createUser({
+    username: `concurrency_user_${Date.now()}`,
+    auth_verifier: 'mock_verifier',
+    public_key: '{"mock":"key"}',
+    encrypted_priv_key: 'mock_priv',
+    salt: 'mock_salt',
+    iv: 'mock_iv'
+  });
+
+  const writePromises = [];
+  for (let i = 0; i < totalParallelWrites; i++) {
+    writePromises.push(
+      db.saveMessage({
+        conversation_id: testConvId,
+        sender_id: testUser.id,
+        ciphertext: `ciphertext_concurrent_msg_${i}`,
+        iv: `iv_${i}`
+      })
+    );
+  }
+
+  const savedMessages = await Promise.all(writePromises);
+  if (savedMessages.length !== totalParallelWrites) {
+    throw new Error(`Expected ${totalParallelWrites} saved messages, got ${savedMessages.length}`);
+  }
+
+  const messagesFromDb = await db.getConversationMessages(testConvId, 100);
+  if (messagesFromDb.length !== totalParallelWrites) {
+    throw new Error(`Race condition detected! Expected ${totalParallelWrites} messages persisted, found only ${messagesFromDb.length}`);
+  }
+  console.log(`  ✅ Concurrency Mutex: Successfully executed ${totalParallelWrites} simultaneous parallel writes with zero lost updates`);
+
+  // 3. Test Corruption Recovery
+  const backupOriginal = fs.readFileSync(localDbPath, 'utf-8');
+  try {
+    fs.writeFileSync(localDbPath, '{ corrupted_json: [invalid_syntax', 'utf-8');
+
+    const recovered = loadLocalData();
+    if (!Array.isArray(recovered.users) || !Array.isArray(recovered.messages)) {
+      throw new Error('Corruption recovery failed to return initial schema object');
+    }
+
+    const afterCorruptFiles = fs.readdirSync(dbDir);
+    const corruptBackups = afterCorruptFiles.filter(f => f.startsWith('local_db.corrupt.'));
+    if (corruptBackups.length === 0) {
+      throw new Error('Corrupt database file was not preserved as backup');
+    }
+    console.log('  ✅ Corruption Preservation: Malformed JSON triggers automatic timestamped backup preservation');
+
+    for (const b of corruptBackups) {
+      fs.unlinkSync(path.join(dbDir, b));
+    }
+  } finally {
+    fs.writeFileSync(localDbPath, backupOriginal, 'utf-8');
+  }
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -1033,6 +1119,7 @@ async function runAllTests() {
     await testHttpSecurityHeadersAndRestrictedCors();
     await testRateLimitingAndBruteForceProtection();
     await testDatabaseRowLevelSecuritySchema();
+    await testLocalStorageAtomicWritesAndConcurrency();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
