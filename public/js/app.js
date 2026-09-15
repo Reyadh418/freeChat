@@ -508,14 +508,20 @@ async function loadMessages(convId) {
 
     let lastDateStr = null;
 
-    for (const msg of messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const nextMsg = messages[i + 1];
+      const isMine = msg.sender_id === state.currentUser.id;
+
+      const isLastInCluster = !nextMsg || nextMsg.sender_id !== msg.sender_id ||
+        (new Date(nextMsg.created_at) - new Date(msg.created_at) > 120000);
+
       const msgDate = new Date(msg.created_at).toDateString();
       if (msgDate !== lastDateStr) {
         lastDateStr = msgDate;
         elements.messagesContainer.appendChild(renderDateDivider(formatDateDivider(msg.created_at)));
       }
 
-      const isMine = msg.sender_id === state.currentUser.id;
       let plainText = '🔒 [Encrypted Message]';
 
       if (state.activeSharedKey) {
@@ -526,7 +532,8 @@ async function loadMessages(convId) {
         id: msg.id,
         isMine,
         plainText,
-        createdAt: msg.created_at
+        createdAt: msg.created_at,
+        isLastInCluster
       });
       elements.messagesContainer.appendChild(bubble);
     }
@@ -556,11 +563,21 @@ async function handleSendMessage() {
       iv
     });
 
+    // If the previous message was also sent by me, cluster it and remove its tail
+    const lastRow = elements.messagesContainer.querySelector('.message-row:last-child');
+    if (lastRow && lastRow.classList.contains('sent')) {
+      lastRow.classList.remove('has-tail');
+      lastRow.classList.add('clustered');
+      const prevTail = lastRow.querySelector('.bubble-tail');
+      if (prevTail) prevTail.remove();
+    }
+
     const bubble = renderMessageBubble({
       id: savedMsg.id,
       isMine: true,
       plainText: text,
-      createdAt: savedMsg.created_at
+      createdAt: savedMsg.created_at,
+      isLastInCluster: true
     });
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
@@ -590,11 +607,21 @@ async function handleIncomingMessage(msg) {
       const existingTyping = document.getElementById('active-typing-indicator');
       if (existingTyping) existingTyping.remove();
 
+      // If the previous message was also received, cluster it and remove its tail
+      const lastRow = elements.messagesContainer.querySelector('.message-row:last-child');
+      if (lastRow && lastRow.classList.contains('received')) {
+        lastRow.classList.remove('has-tail');
+        lastRow.classList.add('clustered');
+        const prevTail = lastRow.querySelector('.bubble-tail');
+        if (prevTail) prevTail.remove();
+      }
+
       const bubble = renderMessageBubble({
         id: msg.id,
         isMine: false,
         plainText,
-        createdAt: msg.created_at
+        createdAt: msg.created_at,
+        isLastInCluster: true
       });
       elements.messagesContainer.appendChild(bubble);
       scrollToBottom(elements.messagesContainer, true);

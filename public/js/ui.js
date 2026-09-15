@@ -97,23 +97,32 @@ export function renderConversationItem(conv, currentUserId, isActive = false, on
   return div;
 }
 
-export function renderMessageBubble({ id, isMine, plainText, createdAt }) {
+export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastInCluster = true }) {
   const row = document.createElement('div');
-  row.className = `message-row ${isMine ? 'sent' : 'received'}`;
+  row.className = `message-row ${isMine ? 'sent' : 'received'} ${isLastInCluster ? 'has-tail' : 'clustered'}`;
   row.id = `msg-${id}`;
 
   const formattedTime = formatTime(createdAt);
 
+  const tailSvg = isLastInCluster ? `
+    <svg class="bubble-tail" viewBox="0 0 9 16" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0,0 C1,5 3.5,12 8.5,15.2 C9,15.6 8.5,16 7,16 L0,16 Z"/>
+    </svg>
+  ` : '';
+
   row.innerHTML = `
     <div class="bubble">
       ${escapeHtml(plainText)}
+      ${tailSvg}
     </div>
     <div class="bubble-meta">
       <span>${formattedTime}</span>
       ${isMine ? `
-        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-        </svg>
+        <span class="delivery-badge" title="Delivered">
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </span>
       ` : ''}
     </div>
   `;

@@ -325,12 +325,48 @@
   background: linear-gradient(180deg, var(--imessage-blue-start) 0%, var(--imessage-blue-end) 100%);
   color: var(--imessage-blue-text);
   border-radius: 19px 19px 4px 19px;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.22);
 }
 
 .message-row.received .bubble {
   background: var(--bg-bubble-received);
   color: var(--text-bubble-received);
   border-radius: 19px 19px 19px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Clustered messages (middle/top of a group from the same sender) */
+.message-row.clustered.sent .bubble {
+  border-radius: 19px 19px 19px 19px;
+}
+
+.message-row.clustered.received .bubble {
+  border-radius: 19px 19px 19px 19px;
+}
+
+.message-row.clustered {
+  margin-bottom: -2px;
+}
+
+/* Authentic iMessage Bubble Tails */
+.bubble-tail {
+  position: absolute;
+  bottom: 0;
+  width: 9px;
+  height: 16px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.message-row.sent .bubble-tail {
+  right: -7px;
+  fill: var(--imessage-blue-end);
+}
+
+.message-row.received .bubble-tail {
+  left: -7px;
+  transform: scaleX(-1);
+  fill: var(--bg-bubble-received);
 }
 
 .bubble-meta {
@@ -340,6 +376,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0.9;
+}
+
+.delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--imessage-blue-start);
 }
 
 .message-row.sent .bubble-meta {
