@@ -104,11 +104,42 @@ export async function deriveMasterKey(password, saltBuffer) {
   );
 }
 
-export async function deriveAuthVerifier(password, saltBase64) {
+export async function deriveAuthVerifier(password, saltBase64, version = 2) {
   const enc = new TextEncoder();
-  const data = enc.encode(`${password}:${saltBase64}`);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-  return arrayBufferToBase64(hashBuffer);
+
+  if (version === 1) {
+    // Legacy single-round SHA-256 fallback for pre-existing accounts
+    const data = enc.encode(`${password}:${saltBase64}`);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    return arrayBufferToBase64(hashBuffer);
+  }
+
+  // v2 Hardened: PBKDF2 (100,000 iterations, SHA-256) with domain-separated salt (:auth)
+  const saltBuffer = typeof saltBase64 === 'string' ? base64ToArrayBuffer(saltBase64) : saltBase64;
+  const authSalt = new Uint8Array(saltBuffer.byteLength + 5);
+  authSalt.set(new Uint8Array(saltBuffer), 0);
+  authSalt.set(enc.encode(':auth'), saltBuffer.byteLength);
+
+  const passwordKey = await window.crypto.subtle.importKey(
+    'raw',
+    enc.encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+
+  const derivedBits = await window.crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: authSalt,
+      iterations: 100000,
+      hash: 'SHA-256'
+    },
+    passwordKey,
+    256 // 256 bits = 32 bytes
+  );
+
+  return arrayBufferToBase64(derivedBits);
 }
 
 // Key backup

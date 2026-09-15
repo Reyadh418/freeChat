@@ -252,7 +252,7 @@ async function handleAuthSubmit(e) {
       elements.authCryptoStatus.textContent = '🛡️ Deriving Key & Verifier...';
       const saltBuffer = base64ToArrayBuffer(preLogin.salt);
       const masterKey = await deriveMasterKey(password, saltBuffer);
-      const authVerifier = await deriveAuthVerifier(password, preLogin.salt);
+      const authVerifier = await deriveAuthVerifier(password, preLogin.salt, preLogin.v || 2);
 
       elements.authCryptoStatus.textContent = '🔐 Authenticating...';
       const loginRes = await API.login(username, authVerifier);

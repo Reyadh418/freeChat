@@ -114,9 +114,17 @@ async function testKeyBackupAndLoginRecovery() {
     ['encrypt', 'decrypt']
   );
 
-  // Auth Verifier
-  const verifierData = enc.encode(`${password}:${saltBase64}`);
-  const authVerifierBuf = await subtle.digest('SHA-256', verifierData);
+  // Auth Verifier (v2 PBKDF2 with 100,000 iterations and domain separation)
+  const authSalt = new Uint8Array(salt.byteLength + 5);
+  authSalt.set(salt, 0);
+  authSalt.set(enc.encode(':auth'), salt.byteLength);
+
+  const authKeyMaterial = await subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const authVerifierBuf = await subtle.deriveBits(
+    { name: 'PBKDF2', salt: authSalt, iterations: 100000, hash: 'SHA-256' },
+    authKeyMaterial,
+    256
+  );
   const authVerifier = arrayBufferToBase64(authVerifierBuf);
 
   // Generate private key & encrypt backup
@@ -144,7 +152,16 @@ async function testKeyBackupAndLoginRecovery() {
   );
 
   // Check login auth verifier matches
-  const loginVerifierBuf = await subtle.digest('SHA-256', enc.encode(`${password}:${saltBase64}`));
+  const loginAuthSalt = new Uint8Array(loginSaltBuffer.byteLength + 5);
+  loginAuthSalt.set(new Uint8Array(loginSaltBuffer), 0);
+  loginAuthSalt.set(enc.encode(':auth'), loginSaltBuffer.byteLength);
+
+  const loginAuthKeyMaterial = await subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const loginVerifierBuf = await subtle.deriveBits(
+    { name: 'PBKDF2', salt: loginAuthSalt, iterations: 100000, hash: 'SHA-256' },
+    loginAuthKeyMaterial,
+    256
+  );
   const loginVerifier = arrayBufferToBase64(loginVerifierBuf);
 
   if (loginVerifier !== authVerifier) {
@@ -505,6 +522,61 @@ async function testPreLoginAntiEnumerationAndKeyPrivacy() {
   console.log('  ✅ Profile Endpoint Protection: Public scraping blocked, authenticated access allowed');
 }
 
+// 8. Hardened Auth Verifier (PBKDF2) & Server-Side Protected Hashing Tests
+async function testHardenedAuthVerifierAndServerHashing() {
+  console.log('\n[8/8] Testing Hardened PBKDF2 Auth Verifier & Server-Side HMAC Protection...');
+  const { hashVerifierServerSide, verifyAuthVerifier } = await import('../server/routes/auth.js');
+
+  const testPass = 'SuperSecurePassphrase2026!';
+  const testSaltBase64 = arrayBufferToBase64(webcrypto.getRandomValues(new Uint8Array(16)));
+
+  // 1. Simulate client PBKDF2 derivation with domain separation (:auth)
+  const enc = new TextEncoder();
+  const saltBuf = base64ToArrayBuffer(testSaltBase64);
+  const authSalt = new Uint8Array(saltBuf.byteLength + 5);
+  authSalt.set(new Uint8Array(saltBuf), 0);
+  authSalt.set(enc.encode(':auth'), saltBuf.byteLength);
+
+  const passKey = await subtle.importKey('raw', enc.encode(testPass), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const clientVerifierBits = await subtle.deriveBits(
+    { name: 'PBKDF2', salt: authSalt, iterations: 100000, hash: 'SHA-256' },
+    passKey,
+    256
+  );
+  const clientVerifier = arrayBufferToBase64(clientVerifierBits);
+
+  if (typeof clientVerifier !== 'string' || clientVerifier.length !== 44) {
+    throw new Error('Client PBKDF2 verifier derivation failed to produce 256-bit base64 output');
+  }
+  console.log('  ✅ Client-Side PBKDF2 Verifier (100,000 rounds) Produced Valid 256-bit Key');
+
+  // 2. Server-side HMAC hashing
+  const serverStoredVerifier = hashVerifierServerSide(clientVerifier);
+  if (!serverStoredVerifier.startsWith('v2$')) {
+    throw new Error('Server stored verifier missing v2$ prefix');
+  }
+  console.log('  ✅ Server-Side Storage: Verifier protected with HMAC-SHA256 (v2$ prefix)');
+
+  // 3. Timing-safe verification
+  const isValid = verifyAuthVerifier(serverStoredVerifier, clientVerifier);
+  if (!isValid) {
+    throw new Error('Valid client verifier failed server-side verification');
+  }
+
+  const isInvalid = verifyAuthVerifier(serverStoredVerifier, 'wrong_client_verifier_value');
+  if (isInvalid) {
+    throw new Error('Invalid client verifier incorrectly accepted');
+  }
+  console.log('  ✅ Timing-Safe Equality: Valid verifier verified, invalid verifier rejected');
+
+  // 4. Pass-the-Hash defense: Stored database hash CANNOT be used as client login verifier
+  const replayAttackSucceeded = verifyAuthVerifier(serverStoredVerifier, serverStoredVerifier);
+  if (replayAttackSucceeded) {
+    throw new Error('CRITICAL: Pass-the-Hash vulnerability! Stored DB verifier accepted as login token');
+  }
+  console.log('  ✅ Pass-the-Hash Defense: Stored DB verifier cannot be replayed directly for login');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -514,6 +586,7 @@ async function runAllTests() {
     await testApiAuthenticationAndIdor();
     await testSocketIoSecurity();
     await testPreLoginAntiEnumerationAndKeyPrivacy();
+    await testHardenedAuthVerifierAndServerHashing();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');

@@ -5,6 +5,37 @@ import { generateToken, authMiddleware, JWT_SECRET } from '../middleware/auth.js
 
 const router = express.Router();
 
+/**
+ * Hashes client auth verifier server-side with HMAC-SHA256.
+ * Ensures that even with database read access, an attacker cannot replay verifiers to log in.
+ */
+export function hashVerifierServerSide(clientVerifier) {
+  return 'v2$' + crypto.createHmac('sha256', JWT_SECRET).update(clientVerifier).digest('base64');
+}
+
+/**
+ * Timing-safe verifier validation supporting v2 HMAC and v1 legacy fallback.
+ */
+export function verifyAuthVerifier(storedVerifier, clientVerifier) {
+  if (!storedVerifier || !clientVerifier) return false;
+
+  try {
+    if (storedVerifier.startsWith('v2$')) {
+      const expected = hashVerifierServerSide(clientVerifier);
+      const bufA = Buffer.from(storedVerifier, 'utf8');
+      const bufB = Buffer.from(expected, 'utf8');
+      return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+    }
+
+    // Legacy v1 comparison
+    const bufA = Buffer.from(storedVerifier, 'utf8');
+    const bufB = Buffer.from(clientVerifier, 'utf8');
+    return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
 // Register
 router.post('/register', async (req, res) => {
   try {
@@ -24,9 +55,12 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'Username is already taken.' });
     }
 
+    // Server-side HMAC protection for stored auth verifiers
+    const serverHashedVerifier = hashVerifierServerSide(auth_verifier);
+
     const user = await db.createUser({
       username: cleanUsername,
-      auth_verifier,
+      auth_verifier: serverHashedVerifier,
       public_key,
       encrypted_priv_key,
       salt,
@@ -76,13 +110,14 @@ router.post('/pre-login', async (req, res) => {
         .subarray(0, 16)
         .toString('base64');
 
-      return res.json({ salt: fakeSalt });
+      return res.json({ salt: fakeSalt, v: 2 });
     }
 
     // Never return encrypted_priv_key or iv to unauthenticated callers!
     // Encrypted private keys are only returned within authorized /login response.
     res.json({
-      salt: user.salt
+      salt: user.salt,
+      v: user.auth_verifier?.startsWith('v2$') ? 2 : 1
     });
   } catch (err) {
     console.error('[Auth Error]:', err);
@@ -99,7 +134,7 @@ router.post('/login', async (req, res) => {
     }
 
     const user = await db.getUserByUsername(username.trim().toLowerCase());
-    if (!user || user.auth_verifier !== auth_verifier) {
+    if (!user || !verifyAuthVerifier(user.auth_verifier, auth_verifier)) {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
