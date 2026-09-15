@@ -1,11 +1,44 @@
 import express from 'express';
+import crypto from 'crypto';
 import { db } from '../config/db.js';
-import { generateToken, authMiddleware } from '../middleware/auth.js';
+import { generateToken, authMiddleware, JWT_SECRET } from '../middleware/auth.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
+/**
+ * Hashes client auth verifier server-side with HMAC-SHA256.
+ * Ensures that even with database read access, an attacker cannot replay verifiers to log in.
+ */
+export function hashVerifierServerSide(clientVerifier) {
+  return 'v2$' + crypto.createHmac('sha256', JWT_SECRET).update(clientVerifier).digest('base64');
+}
+
+/**
+ * Timing-safe verifier validation supporting v2 HMAC and v1 legacy fallback.
+ */
+export function verifyAuthVerifier(storedVerifier, clientVerifier) {
+  if (!storedVerifier || !clientVerifier) return false;
+
+  try {
+    if (storedVerifier.startsWith('v2$')) {
+      const expected = hashVerifierServerSide(clientVerifier);
+      const bufA = Buffer.from(storedVerifier, 'utf8');
+      const bufB = Buffer.from(expected, 'utf8');
+      return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+    }
+
+    // Legacy v1 comparison
+    const bufA = Buffer.from(storedVerifier, 'utf8');
+    const bufB = Buffer.from(clientVerifier, 'utf8');
+    return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
 // Register
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter.middleware(), async (req, res) => {
   try {
     const { username, auth_verifier, public_key, encrypted_priv_key, salt, iv, avatar_color } = req.body;
 
@@ -13,9 +46,60 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Missing registration fields.' });
     }
 
+    if (
+      typeof username !== 'string' ||
+      typeof auth_verifier !== 'string' ||
+      typeof public_key !== 'string' ||
+      typeof encrypted_priv_key !== 'string' ||
+      typeof salt !== 'string' ||
+      typeof iv !== 'string'
+    ) {
+      return res.status(400).json({ error: 'Invalid field types: all registration credentials must be strings.' });
+    }
+
     const cleanUsername = username.trim().toLowerCase();
     if (!/^[a-z0-9_.-]{3,30}$/.test(cleanUsername)) {
       return res.status(400).json({ error: 'Username must be 3-30 characters long and contain only letters, numbers, underscores, dashes, or dots.' });
+    }
+
+    // Validate avatar_color if provided
+    let safeAvatarColor = '#007AFF';
+    if (avatar_color !== undefined && avatar_color !== null) {
+      if (typeof avatar_color !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(avatar_color)) {
+        return res.status(400).json({ error: 'Invalid avatar color format. Must be a valid hex color code (e.g. #007AFF).' });
+      }
+      safeAvatarColor = avatar_color;
+    }
+
+    // Validate size and format of cryptographic parameters
+    if (auth_verifier.length < 16 || auth_verifier.length > 256) {
+      return res.status(400).json({ error: 'Invalid auth verifier length.' });
+    }
+
+    if (salt.length < 10 || salt.length > 128) {
+      return res.status(400).json({ error: 'Invalid salt length.' });
+    }
+
+    if (iv.length < 10 || iv.length > 64) {
+      return res.status(400).json({ error: 'Invalid iv length.' });
+    }
+
+    if (encrypted_priv_key.length < 10 || encrypted_priv_key.length > 8192) {
+      return res.status(400).json({ error: 'Invalid encrypted private key length.' });
+    }
+
+    if (public_key.length < 10 || public_key.length > 2048) {
+      return res.status(400).json({ error: 'Invalid public key length.' });
+    }
+
+    // Validate that public_key is parseable and is an EC P-256 JWK
+    try {
+      const parsedKey = JSON.parse(public_key);
+      if (parsedKey.kty !== 'EC' || parsedKey.crv !== 'P-256') {
+        return res.status(400).json({ error: 'Invalid public key: must be an EC P-256 JWK.' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Invalid public key format: not valid JSON.' });
     }
 
     const existingUser = await db.getUserByUsername(cleanUsername);
@@ -23,14 +107,17 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'Username is already taken.' });
     }
 
+    // Server-side HMAC protection for stored auth verifiers
+    const serverHashedVerifier = hashVerifierServerSide(auth_verifier);
+
     const user = await db.createUser({
       username: cleanUsername,
-      auth_verifier,
+      auth_verifier: serverHashedVerifier,
       public_key,
       encrypted_priv_key,
       salt,
       iv,
-      avatar_color
+      avatar_color: safeAvatarColor
     });
 
     const token = generateToken(user);
@@ -54,23 +141,35 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Pre-login
-router.post('/pre-login', async (req, res) => {
+// Pre-login (Returns only public key derivation salt; zero key exposure & anti-enumeration)
+router.post('/pre-login', authLimiter.middleware(), async (req, res) => {
   try {
     const { username } = req.body;
-    if (!username) {
+    if (!username || typeof username !== 'string' || username.length > 50) {
       return res.status(400).json({ error: 'Username is required.' });
     }
 
-    const user = await db.getUserByUsername(username.trim().toLowerCase());
+    const cleanUsername = username.trim().toLowerCase();
+    const user = await db.getUserByUsername(cleanUsername);
+
     if (!user) {
-      return res.status(404).json({ error: 'Account not found.' });
+      // Anti-enumeration: Return a deterministic pseudorandom 16-byte salt for non-existent users
+      // This ensures identical HTTP status (200 OK) and response timing, preventing username enumeration.
+      const fakeSalt = crypto
+        .createHmac('sha256', JWT_SECRET)
+        .update(`fake-salt:${cleanUsername}`)
+        .digest()
+        .subarray(0, 16)
+        .toString('base64');
+
+      return res.json({ salt: fakeSalt, v: 2 });
     }
 
+    // Never return encrypted_priv_key or iv to unauthenticated callers!
+    // Encrypted private keys are only returned within authorized /login response.
     res.json({
       salt: user.salt,
-      iv: user.iv,
-      encrypted_priv_key: user.encrypted_priv_key
+      v: user.auth_verifier?.startsWith('v2$') ? 2 : 1
     });
   } catch (err) {
     console.error('[Auth Error]:', err);
@@ -79,15 +178,15 @@ router.post('/pre-login', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter.middleware(), async (req, res) => {
   try {
     const { username, auth_verifier } = req.body;
-    if (!username || !auth_verifier) {
+    if (!username || !auth_verifier || typeof username !== 'string' || typeof auth_verifier !== 'string' || username.length > 50 || auth_verifier.length > 256) {
       return res.status(400).json({ error: 'Username and auth verifier are required.' });
     }
 
     const user = await db.getUserByUsername(username.trim().toLowerCase());
-    if (!user || user.auth_verifier !== auth_verifier) {
+    if (!user || !verifyAuthVerifier(user.auth_verifier, auth_verifier)) {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
@@ -140,8 +239,8 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Profile
-router.get('/user/:username', async (req, res) => {
+// Profile (Authenticated users only)
+router.get('/user/:username', authMiddleware, async (req, res) => {
   try {
     const user = await db.getUserByUsername(req.params.username.trim().toLowerCase());
     if (!user) {

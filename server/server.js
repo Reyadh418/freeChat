@@ -11,6 +11,8 @@ import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/auth.js';
+import { securityHeadersMiddleware, corsOptions, isOriginAllowed } from './middleware/security.js';
+import { apiLimiter, socketHandshakeLimiter, socketMessageLimiter, socketTypingLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
@@ -18,19 +20,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.disable('x-powered-by');
+
 const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
+  maxHttpBufferSize: 256 * 1024, // 256KB max WebSocket frame to prevent memory exhaustion
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS policy: Socket connection denied for this origin.'));
+      }
+    },
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
 // Middleware
-app.use(cors());
+app.use(securityHeadersMiddleware);
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Global API rate limiting
+app.use('/api', apiLimiter.middleware());
 
 // Static assets
 const publicPath = path.join(__dirname, '../public');
@@ -59,6 +75,12 @@ const onlineUsers = new Map();
 
 // Socket.IO Handshake Authentication Middleware
 io.use((socket, next) => {
+  // Handshake connection rate limiting
+  const handshakeLimit = socketHandshakeLimiter.check(socket);
+  if (!handshakeLimit.allowed) {
+    return next(new Error('Rate limit exceeded: Too many socket connections.'));
+  }
+
   const token = socket.handshake.auth?.token || 
     (socket.handshake.headers?.authorization?.startsWith('Bearer ') 
       ? socket.handshake.headers.authorization.substring(7) 
@@ -134,10 +156,13 @@ io.on('connection', (socket) => {
     socket.leave(`conv:${conversationId}`);
   });
 
-  // Typing Indicators (enforce verified identity and participant check)
+  // Typing Indicators (enforce verified identity, rate limits, and participant check)
   socket.on('typing_start', async ({ conversationId }) => {
     if (!conversationId) return;
     try {
+      const typingLimit = socketTypingLimiter.check(socket.id);
+      if (!typingLimit.allowed) return;
+
       const isParticipant = await db.isUserInConversation(conversationId, socket.user.id);
       if (!isParticipant) return;
 
@@ -169,15 +194,66 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Messages (enforce verified senderId and participant authorization)
+  // Messages (enforce verified senderId, payload bounds, and participant authorization)
   socket.on('send_message', async (messageData, callback) => {
     try {
+      if (!messageData || typeof messageData !== 'object') {
+        if (typeof callback === 'function') {
+          callback({ error: 'Invalid payload structure.' });
+        }
+        return;
+      }
+
+      // Message emission rate limiting per socket
+      const msgLimit = socketMessageLimiter.check(socket.id);
+      if (!msgLimit.allowed) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Rate limit exceeded: You are sending messages too fast. Please slow down.' });
+        }
+        return;
+      }
+
       const { conversationId, ciphertext, iv, senderPublicKey, mediaUrl, mediaType } = messageData;
       const senderId = socket.user.id; // Enforce verified identity
 
-      if (!conversationId || !ciphertext || !iv) {
+      // Strict type and size bounds to prevent memory bloat and injection attacks
+      if (
+        typeof conversationId !== 'string' ||
+        conversationId.length < 1 ||
+        conversationId.length > 128 ||
+        typeof ciphertext !== 'string' ||
+        ciphertext.length < 1 ||
+        ciphertext.length > 131072 || // Max 128KB ciphertext
+        typeof iv !== 'string' ||
+        iv.length < 1 ||
+        iv.length > 64
+      ) {
         if (typeof callback === 'function') {
-          callback({ error: 'Missing payload.' });
+          callback({ error: 'Invalid message payload format or payload exceeds maximum allowed size.' });
+        }
+        return;
+      }
+
+      if (senderPublicKey && (typeof senderPublicKey !== 'string' || senderPublicKey.length > 2048)) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Invalid senderPublicKey: must be string under 2KB.' });
+        }
+        return;
+      }
+
+      if (mediaUrl) {
+        // Enforce strictly http or https schemes (preventing javascript: or data: script injection)
+        if (typeof mediaUrl !== 'string' || mediaUrl.length > 2048 || !/^https?:\/\/[^\s$.?#].[^\s]*$/i.test(mediaUrl)) {
+          if (typeof callback === 'function') {
+            callback({ error: 'Invalid mediaUrl: must be a valid HTTP or HTTPS URL under 2KB.' });
+          }
+          return;
+        }
+      }
+
+      if (mediaType && (typeof mediaType !== 'string' || mediaType.length > 64)) {
+        if (typeof callback === 'function') {
+          callback({ error: 'Invalid mediaType format.' });
         }
         return;
       }

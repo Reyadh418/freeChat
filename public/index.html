@@ -104,9 +104,22 @@
             </button>
             <div class="avatar" id="chat-header-avatar" style="background-color: #007AFF;" aria-hidden="true">?</div>
             <div class="chat-header-details">
-              <span class="chat-header-name" id="chat-header-name">Recipient</span>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span class="chat-header-name" id="chat-header-name">Recipient</span>
+                <span id="header-verified-badge" class="verified-badge-pill" style="display: none;" title="Identity verified">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+                  Verified
+                </span>
+              </div>
               <span class="chat-header-subtitle" id="chat-header-subtitle">freeChat • End-to-End Encrypted 🔒</span>
             </div>
+          </div>
+          <div class="chat-header-actions">
+            <button id="btn-verify-safety-number" class="icon-btn" title="Verify End-to-End Encryption Safety Number" aria-label="Verify Safety Number">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+              </svg>
+            </button>
           </div>
         </header>
 
@@ -187,6 +200,58 @@
       </div>
 
       <div class="search-results-list" id="search-results-list" role="region" aria-label="User search results"></div>
+    </div>
+  </div>
+
+  <!-- Safety Number / Key Verification modal -->
+  <div class="modal-overlay" id="safety-number-modal" role="dialog" aria-modal="true" aria-labelledby="safety-modal-title">
+    <div class="glass-card safety-modal-card">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="safety-shield-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 id="safety-modal-title" style="font-size: 18px; font-weight: 700; margin: 0;">Safety Number</h3>
+            <p id="safety-modal-subtitle" style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">End-to-End Encryption Verification</p>
+          </div>
+        </div>
+        <button id="close-safety-modal-btn" class="icon-btn" style="width: 30px; height: 30px;" title="Close" aria-label="Close dialog">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+
+      <!-- Key change warning banner -->
+      <div id="safety-alert-banner" class="safety-alert-banner" style="display: none;" role="alert">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style="flex-shrink: 0;" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        <div>
+          <strong style="display: block; font-size: 13px;">Security Notice: Key Changed</strong>
+          <span style="font-size: 12px; line-height: 1.3; opacity: 0.95;">This contact's encryption key has changed since you last verified. Compare safety numbers before continuing your conversation.</span>
+        </div>
+      </div>
+
+      <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+        Compare this 60-digit safety number with <strong id="safety-recipient-name">@recipient</strong>. If both numbers match, your chat is protected from Man-in-the-Middle eavesdropping.
+      </p>
+
+      <div class="safety-number-container">
+        <div class="safety-number-grid" id="safety-number-grid" aria-label="60-digit safety number"></div>
+        <div class="safety-fingerprint-row">
+          <span style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Fingerprint</span>
+          <span class="safety-fingerprint" id="safety-fingerprint-display"></span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 4px;">
+        <button id="btn-copy-safety-number" class="glass-btn" style="flex: 1; padding: 11px; font-size: 14px; font-weight: 500;">
+          Copy Number
+        </button>
+        <button id="btn-toggle-verify-contact" class="glass-btn glass-btn-primary" style="flex: 1.2; padding: 11px; font-size: 14px; font-weight: 600;">
+          Mark as Verified
+        </button>
+      </div>
     </div>
   </div>
 
