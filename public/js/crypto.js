@@ -315,3 +315,108 @@ export const KeyStore = {
     });
   }
 };
+
+// Canonical serialization of ECDH public key JWK
+export function canonicalJwkString(jwk) {
+  const obj = typeof jwk === 'string' ? JSON.parse(jwk) : jwk;
+  return JSON.stringify({
+    crv: obj.crv,
+    kty: obj.kty,
+    x: obj.x,
+    y: obj.y
+  });
+}
+
+/**
+ * Computes a deterministic, symmetric safety number and fingerprint between two public keys.
+ * Sorts the two keys canonically so both parties compute the exact same 60-digit number.
+ */
+export async function computeSafetyNumber(localPublicKeyJwk, remotePublicKeyJwk) {
+  const normA = canonicalJwkString(localPublicKeyJwk);
+  const normB = canonicalJwkString(remotePublicKeyJwk);
+
+  // Sort canonically so order of local/remote is symmetric on both ends
+  const sorted = [normA, normB].sort();
+  const enc = new TextEncoder();
+  const combined = enc.encode(`${sorted[0]}|${sorted[1]}`);
+
+  // SHA-512 provides 64 bytes of entropy for 60 decimal digits
+  const cryptoSubtle = (typeof window !== 'undefined' && window.crypto?.subtle) || globalThis.crypto?.subtle;
+  const digestBuffer = await cryptoSubtle.digest('SHA-512', combined);
+  const bytes = new Uint8Array(digestBuffer);
+
+  // 12 blocks of 5 digits = 60 digits total (Signal / WhatsApp standard format)
+  const blocks = [];
+  for (let i = 0; i < 12; i++) {
+    const offset = i * 4;
+    const val = ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+    const block = (val % 100000).toString().padStart(5, '0');
+    blocks.push(block);
+  }
+
+  // Also derive a short 16-character hex fingerprint (XXXX-XXXX-XXXX-XXXX)
+  const shortDigest = await cryptoSubtle.digest('SHA-256', combined);
+  const shortBytes = new Uint8Array(shortDigest).subarray(0, 8);
+  let hex = '';
+  for (const b of shortBytes) {
+    hex += b.toString(16).padStart(2, '0').toUpperCase();
+  }
+  const fingerprint = hex.match(/.{1,4}/g).join('-');
+
+  return {
+    safetyNumber: blocks.join(' '),
+    blocks,
+    fingerprint
+  };
+}
+
+// Verification storage helpers
+export const VerifiedKeys = {
+  _getStorage() {
+    if (typeof localStorage !== 'undefined') return localStorage;
+    if (!this._mockStorage) {
+      this._mockStorage = {
+        _data: {},
+        getItem(k) { return this._data[k] || null; },
+        setItem(k, v) { this._data[k] = String(v); },
+        removeItem(k) { delete this._data[k]; }
+      };
+    }
+    return this._mockStorage;
+  },
+
+  _getKey(currentUserId) {
+    return `freeChat_verified_keys_${currentUserId}`;
+  },
+
+  getAll(currentUserId) {
+    if (!currentUserId) return {};
+    try {
+      return JSON.parse(this._getStorage().getItem(this._getKey(currentUserId)) || '{}');
+    } catch {
+      return {};
+    }
+  },
+
+  get(currentUserId, contactId) {
+    const all = this.getAll(currentUserId);
+    return all[contactId] || null;
+  },
+
+  set(currentUserId, contactId, fingerprint, verified = true) {
+    const all = this.getAll(currentUserId);
+    all[contactId] = {
+      fingerprint,
+      verified,
+      updatedAt: Date.now()
+    };
+    this._getStorage().setItem(this._getKey(currentUserId), JSON.stringify(all));
+  },
+
+  remove(currentUserId, contactId) {
+    const all = this.getAll(currentUserId);
+    delete all[contactId];
+    this._getStorage().setItem(this._getKey(currentUserId), JSON.stringify(all));
+  }
+};
+

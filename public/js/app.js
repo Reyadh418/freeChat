@@ -13,7 +13,9 @@ import {
   arrayBufferToBase64,
   base64ToArrayBuffer,
   clearSharedKeyCache,
-  KeyStore
+  KeyStore,
+  computeSafetyNumber,
+  VerifiedKeys
 } from './crypto.js';
 
 import { API } from './api.js';
@@ -38,6 +40,11 @@ const state = {
   activeConversation: null,
   activeTargetUser: null,
   activeSharedKey: null,
+  activeSafetyNumber: null,
+  activeSafetyBlocks: [],
+  activeFingerprint: null,
+  activeContactVerified: false,
+  activeKeyChanged: false,
   onlineUsers: new Set(),
   searchQuery: '',
   isTypingTimer: null,
@@ -63,6 +70,8 @@ const elements = {
   chatHeaderAvatar: document.getElementById('chat-header-avatar'),
   chatHeaderName: document.getElementById('chat-header-name'),
   chatHeaderSubtitle: document.getElementById('chat-header-subtitle'),
+  headerVerifiedBadge: document.getElementById('header-verified-badge'),
+  btnVerifySafetyNumber: document.getElementById('btn-verify-safety-number'),
   messagesContainer: document.getElementById('messages-container'),
   composerInput: document.getElementById('composer-input'),
   sendBtn: document.getElementById('send-btn'),
@@ -88,7 +97,17 @@ const elements = {
   newChatModal: document.getElementById('new-chat-modal'),
   closeNewChatBtn: document.getElementById('close-new-chat-btn'),
   userSearchInput: document.getElementById('user-search-input'),
-  searchResultsList: document.getElementById('search-results-list')
+  searchResultsList: document.getElementById('search-results-list'),
+
+  // Safety Number modal
+  safetyNumberModal: document.getElementById('safety-number-modal'),
+  closeSafetyModalBtn: document.getElementById('close-safety-modal-btn'),
+  safetyRecipientName: document.getElementById('safety-recipient-name'),
+  safetyAlertBanner: document.getElementById('safety-alert-banner'),
+  safetyNumberGrid: document.getElementById('safety-number-grid'),
+  safetyFingerprintDisplay: document.getElementById('safety-fingerprint-display'),
+  btnCopySafetyNumber: document.getElementById('btn-copy-safety-number'),
+  btnToggleVerifyContact: document.getElementById('btn-toggle-verify-contact')
 };
 
 let currentAuthMode = 'login';
@@ -455,9 +474,19 @@ function renderConversationsList() {
 function updateChatHeaderPresence() {
   if (!state.activeTargetUser) return;
   const isOnline = state.onlineUsers.has(state.activeTargetUser.id);
-  elements.chatHeaderSubtitle.innerHTML = isOnline
-    ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--status-online); margin-right:4px;"></span> Online • E2EE 🔒`
-    : `<svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg> freeChat • End-to-End Encrypted`;
+
+  if (state.activeKeyChanged) {
+    elements.chatHeaderSubtitle.innerHTML = `<span style="color: var(--danger, #ff3b30); font-weight:600; cursor:pointer;" title="Click to view safety number">⚠️ Key Changed! Verify Safety Number</span>`;
+  } else {
+    elements.chatHeaderSubtitle.innerHTML = isOnline
+      ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--status-online); margin-right:4px;"></span> Online • E2EE 🔒`
+      : `<svg class="e2e-lock-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg> freeChat • End-to-End Encrypted`;
+  }
+
+  // Update verified badge in header
+  if (elements.headerVerifiedBadge) {
+    elements.headerVerifiedBadge.style.display = state.activeContactVerified ? 'inline-flex' : 'none';
+  }
 }
 
 async function selectConversation(conv) {
@@ -495,7 +524,7 @@ async function selectConversation(conv) {
 
   state.activeTargetUser = otherParticipant;
 
-  // Key exchange
+  // Key exchange & Safety Number
   try {
     if (otherParticipant?.public_key) {
       state.activeSharedKey = await getSharedSecretKey(
@@ -503,9 +532,37 @@ async function selectConversation(conv) {
         otherParticipant.public_key,
         otherParticipant.id
       );
+
+      if (state.localPublicKey) {
+        const localJwk = await exportPublicKey(state.localPublicKey);
+        const safety = await computeSafetyNumber(localJwk, otherParticipant.public_key);
+        state.activeSafetyNumber = safety.safetyNumber;
+        state.activeSafetyBlocks = safety.blocks;
+        state.activeFingerprint = safety.fingerprint;
+
+        const stored = VerifiedKeys.get(state.currentUser.id, otherParticipant.id);
+        if (stored) {
+          if (stored.fingerprint !== safety.fingerprint) {
+            state.activeKeyChanged = true;
+            state.activeContactVerified = false;
+          } else {
+            state.activeKeyChanged = false;
+            state.activeContactVerified = Boolean(stored.verified);
+          }
+        } else {
+          state.activeKeyChanged = false;
+          state.activeContactVerified = false;
+        }
+      }
+    } else {
+      state.activeSafetyNumber = null;
+      state.activeSafetyBlocks = [];
+      state.activeFingerprint = null;
+      state.activeContactVerified = false;
+      state.activeKeyChanged = false;
     }
   } catch (err) {
-    console.error('[Key Exchange Error]:', err);
+    console.error('[Key Exchange / Safety Number Error]:', err);
     showToast('Failed to establish E2EE key exchange.');
   }
 
@@ -868,6 +925,110 @@ async function startDirectChatWith(targetUsername) {
   }
 }
 
+// Safety Number & Key Verification
+async function openSafetyNumberModal() {
+  if (!state.activeTargetUser) return;
+  lastFocusedElementBeforeModal = document.activeElement;
+  elements.safetyRecipientName.textContent = `@${state.activeTargetUser.username}`;
+
+  // If safety number hasn't been computed yet, compute it now
+  if (!state.activeSafetyNumber && state.localPublicKey && state.activeTargetUser.public_key) {
+    try {
+      const localJwk = await exportPublicKey(state.localPublicKey);
+      const safety = await computeSafetyNumber(localJwk, state.activeTargetUser.public_key);
+      state.activeSafetyNumber = safety.safetyNumber;
+      state.activeSafetyBlocks = safety.blocks;
+      state.activeFingerprint = safety.fingerprint;
+    } catch (err) {
+      console.error('[Safety Number Computation Error]:', err);
+    }
+  }
+
+  // Render grid blocks
+  elements.safetyNumberGrid.innerHTML = '';
+  if (state.activeSafetyBlocks && state.activeSafetyBlocks.length > 0) {
+    state.activeSafetyBlocks.forEach(block => {
+      const blockEl = document.createElement('div');
+      blockEl.className = 'safety-number-block';
+      blockEl.textContent = block;
+      elements.safetyNumberGrid.appendChild(blockEl);
+    });
+  } else {
+    elements.safetyNumberGrid.textContent = 'Safety number unavailable';
+  }
+
+  // Fingerprint
+  elements.safetyFingerprintDisplay.textContent = state.activeFingerprint || '—';
+
+  // Key changed alert banner
+  if (state.activeKeyChanged) {
+    elements.safetyAlertBanner.style.display = 'flex';
+  } else {
+    elements.safetyAlertBanner.style.display = 'none';
+  }
+
+  // Toggle button text & style
+  updateSafetyVerifyButtonState();
+
+  elements.safetyNumberModal.classList.add('active');
+  elements.btnCopySafetyNumber.focus();
+}
+
+function updateSafetyVerifyButtonState() {
+  if (state.activeContactVerified) {
+    elements.btnToggleVerifyContact.textContent = 'Clear Verification';
+    elements.btnToggleVerifyContact.classList.remove('glass-btn-primary');
+  } else {
+    elements.btnToggleVerifyContact.textContent = 'Mark as Verified';
+    elements.btnToggleVerifyContact.classList.add('glass-btn-primary');
+  }
+}
+
+function closeSafetyNumberModal() {
+  elements.safetyNumberModal.classList.remove('active');
+  if (lastFocusedElementBeforeModal && typeof lastFocusedElementBeforeModal.focus === 'function') {
+    lastFocusedElementBeforeModal.focus();
+  }
+}
+
+async function handleCopySafetyNumber() {
+  if (!state.activeSafetyNumber) return;
+  try {
+    await navigator.clipboard.writeText(state.activeSafetyNumber);
+    const origText = elements.btnCopySafetyNumber.textContent;
+    elements.btnCopySafetyNumber.textContent = 'Copied!';
+    setTimeout(() => {
+      elements.btnCopySafetyNumber.textContent = origText;
+    }, 2000);
+    showToast('Safety number copied to clipboard');
+  } catch (err) {
+    console.error('Clipboard copy failed:', err);
+    showToast('Failed to copy to clipboard');
+  }
+}
+
+function handleToggleVerifyContact() {
+  if (!state.activeTargetUser || !state.activeFingerprint) return;
+
+  if (state.activeContactVerified) {
+    // Unmark verification
+    VerifiedKeys.remove(state.currentUser.id, state.activeTargetUser.id);
+    state.activeContactVerified = false;
+    state.activeKeyChanged = false;
+    showToast(`Verification cleared for @${state.activeTargetUser.username}`);
+  } else {
+    // Mark as verified
+    VerifiedKeys.set(state.currentUser.id, state.activeTargetUser.id, state.activeFingerprint, true);
+    state.activeContactVerified = true;
+    state.activeKeyChanged = false;
+    showToast(`@${state.activeTargetUser.username} marked as verified 🔒`);
+  }
+
+  updateSafetyVerifyButtonState();
+  elements.safetyAlertBanner.style.display = 'none';
+  updateChatHeaderPresence();
+}
+
 // Event listeners
 function setupEventListeners() {
   elements.themeToggleBtn.addEventListener('click', toggleTheme);
@@ -883,6 +1044,27 @@ function setupEventListeners() {
   }
   elements.closeNewChatBtn.addEventListener('click', closeNewChatModal);
   elements.userSearchInput.addEventListener('input', handleUserSearch);
+
+  // Safety Number & Key Verification listeners
+  if (elements.btnVerifySafetyNumber) {
+    elements.btnVerifySafetyNumber.addEventListener('click', openSafetyNumberModal);
+  }
+  if (elements.chatHeaderSubtitle) {
+    elements.chatHeaderSubtitle.addEventListener('click', () => {
+      if (state.activeKeyChanged) {
+        openSafetyNumberModal();
+      }
+    });
+  }
+  if (elements.closeSafetyModalBtn) {
+    elements.closeSafetyModalBtn.addEventListener('click', closeSafetyNumberModal);
+  }
+  if (elements.btnCopySafetyNumber) {
+    elements.btnCopySafetyNumber.addEventListener('click', handleCopySafetyNumber);
+  }
+  if (elements.btnToggleVerifyContact) {
+    elements.btnToggleVerifyContact.addEventListener('click', handleToggleVerifyContact);
+  }
 
   // Network offline and online detection
   window.addEventListener('online', () => {
@@ -913,6 +1095,13 @@ function setupEventListeners() {
       closeNewChatModal();
     }
   });
+  if (elements.safetyNumberModal) {
+    elements.safetyNumberModal.addEventListener('click', (e) => {
+      if (e.target === elements.safetyNumberModal) {
+        closeSafetyNumberModal();
+      }
+    });
+  }
 
   // Modal keyboard handling (focus trap & Escape)
   window.addEventListener('keydown', (e) => {
@@ -924,6 +1113,12 @@ function setupEventListeners() {
       trapModalFocus(elements.newChatModal, e);
     } else if (elements.authModal.classList.contains('active')) {
       trapModalFocus(elements.authModal, e);
+    } else if (elements.safetyNumberModal?.classList.contains('active')) {
+      if (e.key === 'Escape') {
+        closeSafetyNumberModal();
+        return;
+      }
+      trapModalFocus(elements.safetyNumberModal, e);
     }
   });
 
