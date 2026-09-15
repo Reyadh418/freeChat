@@ -47,6 +47,7 @@ const state = {
 // Elements
 const elements = {
   themeToggleBtn: document.getElementById('theme-toggle-btn'),
+  themeColorMeta: document.getElementById('theme-color-meta'),
   newChatBtn: document.getElementById('new-chat-btn'),
   searchConvInput: document.getElementById('search-conv-input'),
   conversationsList: document.getElementById('conversations-list'),
@@ -57,6 +58,7 @@ const elements = {
   // Chat pane
   chatPane: document.getElementById('chat-pane'),
   emptyChatState: document.getElementById('empty-chat-state'),
+  emptyChatStartBtn: document.getElementById('empty-chat-start-btn'),
   activeChatView: document.getElementById('active-chat-view'),
   chatHeaderAvatar: document.getElementById('chat-header-avatar'),
   chatHeaderName: document.getElementById('chat-header-name'),
@@ -65,6 +67,10 @@ const elements = {
   composerInput: document.getElementById('composer-input'),
   sendBtn: document.getElementById('send-btn'),
   btnBack: document.getElementById('btn-back'),
+
+  // Status banner
+  connectionStatusBar: document.getElementById('connection-status-bar'),
+  connectionStatusText: document.getElementById('connection-status-text'),
 
   // Auth modal
   authModal: document.getElementById('auth-modal'),
@@ -128,6 +134,7 @@ async function initApp() {
 function initTheme() {
   const savedTheme = localStorage.getItem('freeChat_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
+  updateThemeColor(savedTheme);
   updateThemeIcon(savedTheme);
 }
 
@@ -136,14 +143,22 @@ function toggleTheme() {
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('freeChat_theme', next);
+  updateThemeColor(next);
   updateThemeIcon(next);
+}
+
+function updateThemeColor(theme) {
+  const meta = elements.themeColorMeta || document.getElementById('theme-color-meta');
+  if (meta) {
+    meta.setAttribute('content', theme === 'dark' ? '#000000' : '#f2f2f7');
+  }
 }
 
 function updateThemeIcon(theme) {
   if (!elements.themeToggleBtn) return;
   elements.themeToggleBtn.innerHTML = theme === 'dark' 
-    ? `<svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>`
-    : `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>`;
+    ? `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>`
+    : `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>`;
 }
 
 // Auth modal
@@ -154,16 +169,22 @@ function showAuthModal(mode = 'login') {
   
   if (mode === 'login') {
     elements.tabLogin.classList.add('active');
+    elements.tabLogin.setAttribute('aria-selected', 'true');
     elements.tabRegister.classList.remove('active');
+    elements.tabRegister.setAttribute('aria-selected', 'false');
     elements.authTitle.textContent = 'Welcome Back';
     elements.authSubtitle.textContent = 'Sign in with your private credentials';
     elements.authSubmitBtn.textContent = 'Sign In';
+    elements.authPasswordInput.setAttribute('autocomplete', 'current-password');
   } else {
     elements.tabRegister.classList.add('active');
+    elements.tabRegister.setAttribute('aria-selected', 'true');
     elements.tabLogin.classList.remove('active');
+    elements.tabLogin.setAttribute('aria-selected', 'false');
     elements.authTitle.textContent = 'Create Identity';
     elements.authSubtitle.textContent = 'Generate your local E2EE keys';
     elements.authSubmitBtn.textContent = 'Create Account & Keys';
+    elements.authPasswordInput.setAttribute('autocomplete', 'new-password');
   }
   elements.authUsernameInput.focus();
 }
@@ -282,6 +303,28 @@ function handleLogout(showConfirmation = true) {
   }
 }
 
+function setConnectionStatus(status, text) {
+  const bar = elements.connectionStatusBar || document.getElementById('connection-status-bar');
+  const label = elements.connectionStatusText || document.getElementById('connection-status-text');
+  if (!bar || !label) return;
+
+  if (status === 'connected') {
+    bar.className = 'connection-status-bar online';
+    label.textContent = text || 'Connected to secure network';
+    setTimeout(() => {
+      bar.classList.add('hidden');
+    }, 1500);
+  } else if (status === 'connecting' || status === 'reconnecting') {
+    bar.className = 'connection-status-bar';
+    label.textContent = text || 'Connecting to real-time network...';
+    bar.classList.remove('hidden');
+  } else if (status === 'offline') {
+    bar.className = 'connection-status-bar';
+    label.textContent = text || 'Offline. Waiting for network...';
+    bar.classList.remove('hidden');
+  }
+}
+
 // Post-auth
 async function onAuthSuccess() {
   elements.sidebarUsername.textContent = `@${state.currentUser.username}`;
@@ -290,6 +333,15 @@ async function onAuthSuccess() {
 
   Realtime.connect({
     token: API.getToken(),
+    onConnect: () => {
+      setConnectionStatus('connected', 'Secure real-time network active');
+    },
+    onDisconnect: () => {
+      setConnectionStatus('reconnecting', 'Connection lost. Reconnecting...');
+    },
+    onReconnectAttempt: () => {
+      setConnectionStatus('reconnecting', 'Reconnecting to real-time network...');
+    },
     onOnlineUsersList: (userIds) => {
       state.onlineUsers = new Set(userIds);
       renderConversationsList();
@@ -301,6 +353,7 @@ async function onAuthSuccess() {
     onConversationUpdated: () => loadConversations(),
     onConnectError: (err) => {
       console.warn('[Socket Connection Error]:', err.message);
+      setConnectionStatus('reconnecting', 'Connection issue. Reconnecting...');
       if (err.message.includes('Authentication error') || err.message.includes('token')) {
         showToast('Realtime session expired. Please log in again.');
         handleLogout(false);
@@ -335,10 +388,25 @@ function renderConversationsList() {
 
   if (filteredConvs.length === 0) {
     elements.conversationsList.innerHTML = `
-      <div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 14px;">
-        ${q ? `No conversations matching "${escapeHtml(q)}"` : 'No conversations yet.<br>Click <strong>+</strong> to start an E2EE chat!'}
+      <div style="padding: 28px 16px; text-align: center; color: var(--text-secondary); font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <p>${q ? `No conversations matching "<strong>${escapeHtml(q)}</strong>"` : 'No conversations yet.'}</p>
+        <button class="glass-btn glass-btn-primary" id="sidebar-new-chat-cta" style="padding: 7px 16px; font-size: 13px;">
+          ${q ? 'Clear Search' : 'Start a Chat'}
+        </button>
       </div>
     `;
+    const cta = document.getElementById('sidebar-new-chat-cta');
+    if (cta) {
+      cta.addEventListener('click', () => {
+        if (q) {
+          if (elements.searchConvInput) elements.searchConvInput.value = '';
+          state.searchQuery = '';
+          renderConversationsList();
+        } else {
+          openNewChatModal();
+        }
+      });
+    }
     return;
   }
 
@@ -349,6 +417,13 @@ function renderConversationsList() {
     item.addEventListener('click', (e) => {
       e.preventDefault();
       selectConversation(conv);
+    });
+
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectConversation(conv);
+      }
     });
 
     elements.conversationsList.appendChild(item);
@@ -384,6 +459,12 @@ function updateChatHeaderPresence() {
 }
 
 async function selectConversation(conv) {
+  // Mobile navigation history support
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  if (isMobile && !document.body.classList.contains('chat-active')) {
+    history.pushState({ chatActive: true }, '');
+  }
+
   // Always bring UI into view immediately
   document.body.classList.add('chat-active');
   elements.emptyChatState.style.display = 'none';
@@ -437,6 +518,17 @@ async function selectConversation(conv) {
   elements.composerInput.focus();
 }
 
+function ensureDateDivider(createdAt) {
+  const msgDate = new Date(createdAt).toDateString();
+  const dividers = elements.messagesContainer.querySelectorAll('.date-divider');
+  const lastDivider = dividers[dividers.length - 1];
+  if (!lastDivider || lastDivider.dataset.date !== msgDate) {
+    const divider = renderDateDivider(formatDateDivider(createdAt));
+    divider.dataset.date = msgDate;
+    elements.messagesContainer.appendChild(divider);
+  }
+}
+
 async function loadMessages(convId) {
   elements.messagesContainer.innerHTML = `
     <div style="text-align:center; padding: 20px; color: var(--text-secondary); font-size: 13px;">
@@ -450,14 +542,22 @@ async function loadMessages(convId) {
 
     let lastDateStr = null;
 
-    for (const msg of messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const nextMsg = messages[i + 1];
+      const isMine = msg.sender_id === state.currentUser.id;
+
+      const isLastInCluster = !nextMsg || nextMsg.sender_id !== msg.sender_id ||
+        (new Date(nextMsg.created_at) - new Date(msg.created_at) > 120000);
+
       const msgDate = new Date(msg.created_at).toDateString();
       if (msgDate !== lastDateStr) {
         lastDateStr = msgDate;
-        elements.messagesContainer.appendChild(renderDateDivider(formatDateDivider(msg.created_at)));
+        const divider = renderDateDivider(formatDateDivider(msg.created_at));
+        divider.dataset.date = msgDate;
+        elements.messagesContainer.appendChild(divider);
       }
 
-      const isMine = msg.sender_id === state.currentUser.id;
       let plainText = '🔒 [Encrypted Message]';
 
       if (state.activeSharedKey) {
@@ -468,7 +568,8 @@ async function loadMessages(convId) {
         id: msg.id,
         isMine,
         plainText,
-        createdAt: msg.created_at
+        createdAt: msg.created_at,
+        isLastInCluster
       });
       elements.messagesContainer.appendChild(bubble);
     }
@@ -498,11 +599,24 @@ async function handleSendMessage() {
       iv
     });
 
+    ensureDateDivider(savedMsg.created_at);
+
+    // If the previous message was also sent by me within 2 minutes, cluster it and remove its tail
+    const lastRow = elements.messagesContainer.querySelector('.message-row:last-child');
+    const isRecent = lastRow?.dataset.timestamp && (Date.now() - Number(lastRow.dataset.timestamp) < 120000);
+    if (lastRow && lastRow.classList.contains('sent') && isRecent) {
+      lastRow.classList.remove('has-tail');
+      lastRow.classList.add('clustered');
+      const prevTail = lastRow.querySelector('.bubble-tail');
+      if (prevTail) prevTail.remove();
+    }
+
     const bubble = renderMessageBubble({
       id: savedMsg.id,
       isMine: true,
       plainText: text,
-      createdAt: savedMsg.created_at
+      createdAt: savedMsg.created_at,
+      isLastInCluster: true
     });
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
@@ -532,11 +646,24 @@ async function handleIncomingMessage(msg) {
       const existingTyping = document.getElementById('active-typing-indicator');
       if (existingTyping) existingTyping.remove();
 
+      ensureDateDivider(msg.created_at);
+
+      // If the previous message was also received within 2 minutes, cluster it and remove its tail
+      const lastRow = elements.messagesContainer.querySelector('.message-row:last-child');
+      const isRecent = lastRow?.dataset.timestamp && (new Date(msg.created_at).getTime() - Number(lastRow.dataset.timestamp) < 120000);
+      if (lastRow && lastRow.classList.contains('received') && isRecent) {
+        lastRow.classList.remove('has-tail');
+        lastRow.classList.add('clustered');
+        const prevTail = lastRow.querySelector('.bubble-tail');
+        if (prevTail) prevTail.remove();
+      }
+
       const bubble = renderMessageBubble({
         id: msg.id,
         isMine: false,
         plainText,
-        createdAt: msg.created_at
+        createdAt: msg.created_at,
+        isLastInCluster: true
       });
       elements.messagesContainer.appendChild(bubble);
       scrollToBottom(elements.messagesContainer, true);
@@ -548,9 +675,11 @@ async function handleIncomingMessage(msg) {
 
 // Typing indicators
 function handleTypingInput() {
-  // Auto-resize composer textarea
+  // Auto-resize composer textarea with fallback
   elements.composerInput.style.height = 'auto';
-  elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+  if (elements.composerInput.value.trim().length > 0) {
+    elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+  }
 
   updateSendButtonState();
 
@@ -568,16 +697,27 @@ function handleTypingInput() {
   }, 2000);
 }
 
+let remoteTypingTimeout = null;
+
 function handleTypingChange({ conversationId, username, isTyping }) {
   if (state.activeConversation?.id !== conversationId) return;
 
   const existing = document.getElementById('active-typing-indicator');
 
-  if (isTyping && !existing) {
-    const typingBubble = renderTypingIndicator(username);
-    elements.messagesContainer.appendChild(typingBubble);
-    scrollToBottom(elements.messagesContainer, true);
-  } else if (!isTyping && existing) {
+  clearTimeout(remoteTypingTimeout);
+
+  if (isTyping) {
+    if (!existing) {
+      const typingBubble = renderTypingIndicator(username);
+      elements.messagesContainer.appendChild(typingBubble);
+      scrollToBottom(elements.messagesContainer, true);
+    }
+    // Auto-cleanup after 4 seconds if remote user closes tab or loses connection
+    remoteTypingTimeout = setTimeout(() => {
+      const el = document.getElementById('active-typing-indicator');
+      if (el) el.remove();
+    }, 4000);
+  } else if (existing) {
     existing.remove();
   }
 }
@@ -610,8 +750,35 @@ function updateSendButtonState() {
   }
 }
 
+// Modal focus trap helper
+function trapModalFocus(modalEl, e) {
+  if (e.key !== 'Tab') return;
+  const focusables = modalEl.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  if (!focusables || focusables.length === 0) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else {
+    if (document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+}
+
+let lastFocusedElementBeforeModal = null;
+
 // User search
 function openNewChatModal() {
+  lastFocusedElementBeforeModal = document.activeElement;
   elements.newChatModal.classList.add('active');
   elements.userSearchInput.value = '';
   elements.searchResultsList.innerHTML = '';
@@ -620,6 +787,9 @@ function openNewChatModal() {
 
 function closeNewChatModal() {
   elements.newChatModal.classList.remove('active');
+  if (lastFocusedElementBeforeModal && typeof lastFocusedElementBeforeModal.focus === 'function') {
+    lastFocusedElementBeforeModal.focus();
+  }
 }
 
 let searchDebounceTimer = null;
@@ -649,13 +819,16 @@ async function handleUserSearch() {
       results.forEach(user => {
         const item = document.createElement('div');
         item.className = 'search-result-item';
+        item.setAttribute('role', 'button');
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('aria-label', `Start chat with @${user.username}`);
         const initial = escapeHtml((user.username || '?')[0].toUpperCase());
         const rawColor = user.avatar_color || '#007AFF';
         const avatarColor = /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : '#007AFF';
 
         item.innerHTML = `
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div class="avatar" style="background-color: ${avatarColor}; width: 36px; height: 36px; font-size: 14px;">
+            <div class="avatar" style="background-color: ${avatarColor}; width: 36px; height: 36px; font-size: 14px;" aria-hidden="true">
               ${initial}
             </div>
             <div>
@@ -663,10 +836,16 @@ async function handleUserSearch() {
               <div style="font-size: 12px; color: var(--text-secondary);">E2EE Public Key Ready 🔒</div>
             </div>
           </div>
-          <button class="glass-btn glass-btn-primary" style="padding: 6px 14px; font-size: 13px;">Chat</button>
+          <button class="glass-btn glass-btn-primary" style="padding: 6px 14px; font-size: 13px;" tabindex="-1" aria-hidden="true">Chat</button>
         `;
 
         item.addEventListener('click', () => startDirectChatWith(user.username));
+        item.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startDirectChatWith(user.username);
+          }
+        });
         elements.searchResultsList.appendChild(item);
       });
     } catch (err) {
@@ -697,13 +876,32 @@ function setupEventListeners() {
   elements.logoutBtn.addEventListener('click', handleLogout);
 
   elements.newChatBtn.addEventListener('click', openNewChatModal);
+  if (elements.emptyChatStartBtn) {
+    elements.emptyChatStartBtn.addEventListener('click', openNewChatModal);
+  }
   elements.closeNewChatBtn.addEventListener('click', closeNewChatModal);
   elements.userSearchInput.addEventListener('input', handleUserSearch);
+
+  // Network offline and online detection
+  window.addEventListener('online', () => {
+    setConnectionStatus('connecting', 'Network restored. Connecting...');
+  });
+  window.addEventListener('offline', () => {
+    setConnectionStatus('offline', 'No internet connection. Waiting for network...');
+  });
 
   if (elements.searchConvInput) {
     elements.searchConvInput.addEventListener('input', (e) => {
       state.searchQuery = e.target.value;
       renderConversationsList();
+    });
+    elements.searchConvInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        elements.searchConvInput.value = '';
+        state.searchQuery = '';
+        renderConversationsList();
+        elements.searchConvInput.blur();
+      }
     });
   }
 
@@ -714,18 +912,27 @@ function setupEventListeners() {
     }
   });
 
-  // Escape key to close modals
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (elements.newChatModal.classList.contains('active')) {
+  // Modal keyboard handling (focus trap & Escape)
+  window.addEventListener('keydown', (e) => {
+    if (elements.newChatModal.classList.contains('active')) {
+      if (e.key === 'Escape') {
         closeNewChatModal();
+        return;
       }
+      trapModalFocus(elements.newChatModal, e);
+    } else if (elements.authModal.classList.contains('active')) {
+      trapModalFocus(elements.authModal, e);
     }
   });
 
   elements.composerInput.addEventListener('input', handleTypingInput);
   elements.composerInput.addEventListener('keydown', (e) => {
+    const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (isMobileViewport) {
+        // On mobile keyboards, allow Return to create a newline
+        return;
+      }
       e.preventDefault();
       handleSendMessage();
     }
@@ -733,7 +940,17 @@ function setupEventListeners() {
   elements.sendBtn.addEventListener('click', handleSendMessage);
 
   elements.btnBack.addEventListener('click', () => {
-    document.body.classList.remove('chat-active');
+    if (window.history.state?.chatActive) {
+      window.history.back();
+    } else {
+      document.body.classList.remove('chat-active');
+    }
+  });
+
+  window.addEventListener('popstate', (e) => {
+    if (!e.state?.chatActive) {
+      document.body.classList.remove('chat-active');
+    }
   });
 }
 

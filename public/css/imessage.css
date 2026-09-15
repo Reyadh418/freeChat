@@ -57,6 +57,15 @@
   fill: currentColor;
 }
 
+#logout-btn {
+  color: var(--text-secondary);
+}
+
+#logout-btn:hover {
+  color: var(--badge-bg);
+  background: rgba(255, 59, 48, 0.12);
+}
+
 /* Search bar */
 .search-bar-container {
   padding: 0 16px 12px;
@@ -316,12 +325,52 @@
   background: linear-gradient(180deg, var(--imessage-blue-start) 0%, var(--imessage-blue-end) 100%);
   color: var(--imessage-blue-text);
   border-radius: 19px 19px 4px 19px;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.22);
 }
 
 .message-row.received .bubble {
   background: var(--bg-bubble-received);
   color: var(--text-bubble-received);
   border-radius: 19px 19px 19px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Clustered messages (middle/top of a group from the same sender) */
+.message-row.clustered.sent .bubble {
+  border-radius: 19px 19px 19px 19px;
+}
+
+.message-row.clustered.received .bubble {
+  border-radius: 19px 19px 19px 19px;
+}
+
+.message-row.clustered {
+  margin-bottom: 2px;
+}
+
+.message-row.clustered .bubble-meta {
+  display: none;
+}
+
+/* Authentic iMessage Bubble Tails */
+.bubble-tail {
+  position: absolute;
+  bottom: 0;
+  width: 9px;
+  height: 16px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.message-row.sent .bubble-tail {
+  right: -7px;
+  fill: var(--imessage-blue-end);
+}
+
+.message-row.received .bubble-tail {
+  left: -7px;
+  transform: scaleX(-1);
+  fill: var(--bg-bubble-received);
 }
 
 .bubble-meta {
@@ -331,6 +380,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0.9;
+}
+
+.delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--imessage-blue-start);
 }
 
 .message-row.sent .bubble-meta {
@@ -386,12 +442,12 @@
 .composer-pill {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-glass);
   border-radius: 22px;
-  padding: 6px 14px;
+  padding: 6px 10px 6px 14px;
   min-height: 44px;
 }
 
@@ -404,7 +460,8 @@
   line-height: 1.35;
   resize: none;
   max-height: 120px;
-  padding: 4px 0;
+  padding: 8px 0;
+  field-sizing: content;
 }
 
 .composer-input::placeholder {
@@ -423,6 +480,7 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  margin-bottom: 3px;
   transition: all var(--duration-fast) var(--spring-bounce);
   opacity: 0.4;
   pointer-events: none;
@@ -609,6 +667,7 @@
   .app-container {
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     position: relative;
     overflow: hidden;
   }
@@ -629,7 +688,7 @@
     inset: 0;
     z-index: 30;
     transform: translateX(100%);
-    transition: transform var(--duration-normal) var(--spring-smooth);
+    transition: transform var(--duration-normal) var(--spring-smooth), visibility 0s linear var(--duration-normal);
     pointer-events: none;
     visibility: hidden;
   }
@@ -643,6 +702,7 @@
     transform: translateX(0);
     pointer-events: auto;
     visibility: visible;
+    transition: transform var(--duration-normal) var(--spring-smooth), visibility 0s linear 0s;
   }
 
   .btn-back {
