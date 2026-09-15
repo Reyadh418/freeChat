@@ -137,7 +137,6 @@ The core tenet of **freeChat** is mathematical privacy:
 ## 🔐 Cryptographic Specification
 
 ### Security Primitives Table
-<<<<<<< HEAD
 
 | Cryptographic Operation | Standard / Algorithm | Parameters / Configuration | Security Purpose |
 | :--- | :--- | :--- | :--- |
@@ -759,8 +758,6 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 <p align="center">
   Built with ❤️ for privacy, freedom of speech, and craftsmanship.
 </p>
-=======
->>>>>>> 24b90da75b775f5b10397245422cd329177ef1ca
 
 | Cryptographic Operation | Standard / Algorithm | Parameters / Configuration | Security Purpose |
 | :--- | :--- | :--- | :--- |
