@@ -47,6 +47,7 @@ const state = {
 // Elements
 const elements = {
   themeToggleBtn: document.getElementById('theme-toggle-btn'),
+  themeColorMeta: document.getElementById('theme-color-meta'),
   newChatBtn: document.getElementById('new-chat-btn'),
   searchConvInput: document.getElementById('search-conv-input'),
   conversationsList: document.getElementById('conversations-list'),
@@ -128,6 +129,7 @@ async function initApp() {
 function initTheme() {
   const savedTheme = localStorage.getItem('freeChat_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
+  updateThemeColor(savedTheme);
   updateThemeIcon(savedTheme);
 }
 
@@ -136,14 +138,22 @@ function toggleTheme() {
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('freeChat_theme', next);
+  updateThemeColor(next);
   updateThemeIcon(next);
+}
+
+function updateThemeColor(theme) {
+  const meta = elements.themeColorMeta || document.getElementById('theme-color-meta');
+  if (meta) {
+    meta.setAttribute('content', theme === 'dark' ? '#000000' : '#f2f2f7');
+  }
 }
 
 function updateThemeIcon(theme) {
   if (!elements.themeToggleBtn) return;
   elements.themeToggleBtn.innerHTML = theme === 'dark' 
-    ? `<svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>`
-    : `<svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>`;
+    ? `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>`
+    : `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>`;
 }
 
 // Auth modal
@@ -154,13 +164,17 @@ function showAuthModal(mode = 'login') {
   
   if (mode === 'login') {
     elements.tabLogin.classList.add('active');
+    elements.tabLogin.setAttribute('aria-selected', 'true');
     elements.tabRegister.classList.remove('active');
+    elements.tabRegister.setAttribute('aria-selected', 'false');
     elements.authTitle.textContent = 'Welcome Back';
     elements.authSubtitle.textContent = 'Sign in with your private credentials';
     elements.authSubmitBtn.textContent = 'Sign In';
   } else {
     elements.tabRegister.classList.add('active');
+    elements.tabRegister.setAttribute('aria-selected', 'true');
     elements.tabLogin.classList.remove('active');
+    elements.tabLogin.setAttribute('aria-selected', 'false');
     elements.authTitle.textContent = 'Create Identity';
     elements.authSubtitle.textContent = 'Generate your local E2EE keys';
     elements.authSubmitBtn.textContent = 'Create Account & Keys';
@@ -349,6 +363,13 @@ function renderConversationsList() {
     item.addEventListener('click', (e) => {
       e.preventDefault();
       selectConversation(conv);
+    });
+
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectConversation(conv);
+      }
     });
 
     elements.conversationsList.appendChild(item);
@@ -610,8 +631,35 @@ function updateSendButtonState() {
   }
 }
 
+// Modal focus trap helper
+function trapModalFocus(modalEl, e) {
+  if (e.key !== 'Tab') return;
+  const focusables = modalEl.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  if (!focusables || focusables.length === 0) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else {
+    if (document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+}
+
+let lastFocusedElementBeforeModal = null;
+
 // User search
 function openNewChatModal() {
+  lastFocusedElementBeforeModal = document.activeElement;
   elements.newChatModal.classList.add('active');
   elements.userSearchInput.value = '';
   elements.searchResultsList.innerHTML = '';
@@ -620,6 +668,9 @@ function openNewChatModal() {
 
 function closeNewChatModal() {
   elements.newChatModal.classList.remove('active');
+  if (lastFocusedElementBeforeModal && typeof lastFocusedElementBeforeModal.focus === 'function') {
+    lastFocusedElementBeforeModal.focus();
+  }
 }
 
 let searchDebounceTimer = null;
@@ -714,12 +765,16 @@ function setupEventListeners() {
     }
   });
 
-  // Escape key to close modals
+  // Modal keyboard handling (focus trap & Escape)
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (elements.newChatModal.classList.contains('active')) {
+    if (elements.newChatModal.classList.contains('active')) {
+      if (e.key === 'Escape') {
         closeNewChatModal();
+        return;
       }
+      trapModalFocus(elements.newChatModal, e);
+    } else if (elements.authModal.classList.contains('active')) {
+      trapModalFocus(elements.authModal, e);
     }
   });
 

@@ -35,8 +35,10 @@ export function showToast(message, duration = 3000) {
 
   const toast = document.createElement('div');
   toast.className = 'ios-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
   toast.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
     </svg>
     <span>${escapeHtml(message)}</span>
@@ -72,9 +74,12 @@ export function renderConversationItem(conv, currentUserId, isActive = false, on
   div.dataset.convId = conv.id;
   div.dataset.targetUsername = otherParticipant.username;
   div.dataset.targetPublicKey = otherParticipant.public_key;
+  div.setAttribute('role', 'button');
+  div.setAttribute('tabindex', '0');
+  div.setAttribute('aria-label', `Conversation with ${otherParticipant.username || 'Unknown'}`);
 
   div.innerHTML = `
-    <div class="avatar" style="background-color: ${color}">
+    <div class="avatar" style="background-color: ${color}" aria-hidden="true">
       ${initial}
       <div class="avatar-status-badge ${isOnline ? '' : 'offline'}" id="status-badge-${otherParticipant.id || conv.id}"></div>
     </div>
@@ -106,7 +111,7 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt }) {
     <div class="bubble-meta">
       <span>${formattedTime}</span>
       ${isMine ? `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
         </svg>
       ` : ''}
