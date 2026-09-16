@@ -19,6 +19,12 @@ import {
 import { API } from './api.js';
 import { Realtime } from './socket.js';
 import {
+  isSoundEnabled,
+  toggleSoundEnabled,
+  playSentSound,
+  playReceivedSound
+} from './audio.js';
+import {
   showToast,
   renderConversationItem,
   renderMessageBubble,
@@ -26,7 +32,10 @@ import {
   renderDateDivider,
   formatDateDivider,
   scrollToBottom,
-  escapeHtml
+  escapeHtml,
+  triggerHaptic,
+  renderMessageSkeletons,
+  renderConversationSkeletons
 } from './ui.js';
 
 // State
@@ -47,6 +56,7 @@ const state = {
 
 // Elements
 const elements = {
+  soundToggleBtn: document.getElementById('sound-toggle-btn'),
   themeToggleBtn: document.getElementById('theme-toggle-btn'),
   themeColorMeta: document.getElementById('theme-color-meta'),
   newChatBtn: document.getElementById('new-chat-btn'),
@@ -100,6 +110,7 @@ let currentAuthMode = 'login';
 // Initialize
 async function initApp() {
   initTheme();
+  updateSoundToggleButton();
   setupEventListeners();
 
   window.addEventListener('auth:expired', () => {
@@ -145,10 +156,29 @@ function initTheme() {
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
   const next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('freeChat_theme', next);
-  updateThemeColor(next);
-  updateThemeIcon(next);
+
+  const applyTheme = () => {
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('freeChat_theme', next);
+    updateThemeColor(next);
+    updateThemeIcon(next);
+  };
+
+  triggerHaptic('light');
+
+  if (document.startViewTransition) {
+    document.startViewTransition(applyTheme);
+  } else {
+    applyTheme();
+  }
+}
+
+function updateSoundToggleButton() {
+  if (!elements.soundToggleBtn) return;
+  const enabled = isSoundEnabled();
+  elements.soundToggleBtn.classList.toggle('muted', !enabled);
+  elements.soundToggleBtn.title = enabled ? 'Mute sound notifications' : 'Enable sound notifications';
+  elements.soundToggleBtn.setAttribute('aria-label', enabled ? 'Mute sound notifications' : 'Enable sound notifications');
 }
 
 function updateThemeColor(theme) {
@@ -370,6 +400,9 @@ async function onAuthSuccess() {
 
 // Conversations
 async function loadConversations() {
+  if (state.conversations.length === 0 && elements.conversationsList) {
+    renderConversationSkeletons(elements.conversationsList);
+  }
   try {
     const convs = await API.getConversations();
     state.conversations = convs;
@@ -576,15 +609,22 @@ function ensureDateDivider(createdAt) {
 }
 
 async function loadMessages(convId) {
-  elements.messagesContainer.innerHTML = `
-    <div style="text-align:center; padding: 20px; color: var(--text-secondary); font-size: 13px;">
-      🔒 Messages are end-to-end encrypted. No one outside of this chat can read them.
-    </div>
-  `;
+  renderMessageSkeletons(elements.messagesContainer);
 
   try {
     const messages = await API.getMessages(convId);
     if (state.activeConversation?.id !== convId) return;
+
+    elements.messagesContainer.innerHTML = '';
+
+    if (messages.length === 0) {
+      elements.messagesContainer.innerHTML = `
+        <div style="text-align:center; padding: 24px; color: var(--text-secondary); font-size: 13px;">
+          🔒 No messages yet. Say hello to start an encrypted conversation!
+        </div>
+      `;
+      return;
+    }
 
     let lastDateStr = null;
 
@@ -666,6 +706,8 @@ async function handleSendMessage() {
     });
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
+    playSentSound();
+    triggerHaptic('light');
     state.unreadWhileScrolledCount = 0;
     if (elements.scrollBottomBtn) elements.scrollBottomBtn.classList.add('hidden');
     if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
@@ -716,6 +758,9 @@ async function handleIncomingMessage(msg) {
         isLastInCluster: true
       });
       elements.messagesContainer.appendChild(bubble);
+
+      playReceivedSound();
+      triggerHaptic('double');
 
       if (wasNearBottom) {
         scrollToBottom(elements.messagesContainer, true);
@@ -926,6 +971,14 @@ async function startDirectChatWith(targetUsername) {
 
 // Event listeners
 function setupEventListeners() {
+  if (elements.soundToggleBtn) {
+    elements.soundToggleBtn.addEventListener('click', () => {
+      toggleSoundEnabled();
+      updateSoundToggleButton();
+      triggerHaptic('light');
+    });
+  }
+
   elements.themeToggleBtn.addEventListener('click', toggleTheme);
 
   elements.tabLogin.addEventListener('click', () => showAuthModal('login'));

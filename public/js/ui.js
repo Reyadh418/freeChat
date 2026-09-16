@@ -81,6 +81,58 @@ export function renderDateDivider(text) {
   return div;
 }
 
+export function triggerHaptic(type = 'light') {
+  if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
+  try {
+    switch (type) {
+      case 'light':
+        navigator.vibrate(8);
+        break;
+      case 'medium':
+        navigator.vibrate(15);
+        break;
+      case 'double':
+        navigator.vibrate([10, 40, 10]);
+        break;
+    }
+  } catch (e) {}
+}
+
+export function renderMessageSkeletons(container) {
+  if (!container) return;
+  container.innerHTML = `
+    <div class="skeleton-bubble-row received">
+      <div class="skeleton-bubble glass-skeleton" style="width: 55%; height: 42px;"></div>
+    </div>
+    <div class="skeleton-bubble-row sent">
+      <div class="skeleton-bubble glass-skeleton" style="width: 42%; height: 38px;"></div>
+    </div>
+    <div class="skeleton-bubble-row received">
+      <div class="skeleton-bubble glass-skeleton" style="width: 68%; height: 56px;"></div>
+    </div>
+    <div class="skeleton-bubble-row sent">
+      <div class="skeleton-bubble glass-skeleton" style="width: 48%; height: 42px;"></div>
+    </div>
+  `;
+}
+
+export function renderConversationSkeletons(container) {
+  if (!container) return;
+  let html = '';
+  for (let i = 0; i < 5; i++) {
+    html += `
+      <div class="skeleton-conv-item">
+        <div class="skeleton-avatar glass-skeleton"></div>
+        <div class="skeleton-lines">
+          <div class="skeleton-line title glass-skeleton"></div>
+          <div class="skeleton-line subtitle glass-skeleton"></div>
+        </div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
 export function renderConversationItem(conv, currentUserId, isActive = false, onlineUsers = new Set()) {
   const otherParticipant = conv.conversation_participants?.find(
     p => (p.user_id || p.users?.id) !== currentUserId
@@ -167,6 +219,7 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastIn
   const executeCopy = async () => {
     try {
       await navigator.clipboard.writeText(plainText);
+      triggerHaptic('medium');
       showToast('Copied to clipboard', 1800);
       if (copyBtn) {
         copyBtn.classList.add('copied');
