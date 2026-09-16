@@ -113,6 +113,15 @@
         <!-- Messages -->
         <div class="messages-container" id="messages-container" role="log" aria-live="polite" aria-label="Chat messages"></div>
 
+        <!-- Floating scroll-to-bottom button -->
+        <button id="scroll-bottom-btn" class="scroll-bottom-pill hidden" title="Scroll to bottom" aria-label="Scroll to latest messages">
+          <svg class="scroll-bottom-arrow" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+          </svg>
+          <span id="scroll-bottom-text" class="scroll-bottom-text">Latest Messages</span>
+          <span id="scroll-bottom-badge" class="scroll-bottom-badge hidden">0</span>
+        </button>
+
         <!-- Composer -->
         <footer class="chat-composer glass-composer">
           <div class="composer-pill">

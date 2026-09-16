@@ -41,7 +41,8 @@ const state = {
   onlineUsers: new Set(),
   searchQuery: '',
   isTypingTimer: null,
-  isTyping: false
+  isTyping: false,
+  unreadWhileScrolledCount: 0
 };
 
 // Elements
@@ -64,6 +65,9 @@ const elements = {
   chatHeaderName: document.getElementById('chat-header-name'),
   chatHeaderSubtitle: document.getElementById('chat-header-subtitle'),
   messagesContainer: document.getElementById('messages-container'),
+  scrollBottomBtn: document.getElementById('scroll-bottom-btn'),
+  scrollBottomText: document.getElementById('scroll-bottom-text'),
+  scrollBottomBadge: document.getElementById('scroll-bottom-badge'),
   composerInput: document.getElementById('composer-input'),
   sendBtn: document.getElementById('send-btn'),
   btnBack: document.getElementById('btn-back'),
@@ -470,6 +474,10 @@ async function selectConversation(conv) {
   elements.emptyChatState.style.display = 'none';
   elements.activeChatView.style.display = 'flex';
 
+  state.unreadWhileScrolledCount = 0;
+  if (elements.scrollBottomBtn) elements.scrollBottomBtn.classList.add('hidden');
+  if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+
   const isAlreadyActive = state.activeConversation?.id === conv.id;
 
   if (isAlreadyActive) {
@@ -516,6 +524,44 @@ async function selectConversation(conv) {
   renderConversationsList();
   await loadMessages(conv.id);
   elements.composerInput.focus();
+}
+
+function isMessagesScrolledNearBottom() {
+  if (!elements.messagesContainer) return true;
+  const threshold = 120;
+  const distanceFromBottom = elements.messagesContainer.scrollHeight - elements.messagesContainer.scrollTop - elements.messagesContainer.clientHeight;
+  return distanceFromBottom <= threshold;
+}
+
+function updateScrollBottomButtonVisibility() {
+  if (!elements.scrollBottomBtn || !elements.messagesContainer) return;
+  const isNear = isMessagesScrolledNearBottom();
+  const distanceFromBottom = elements.messagesContainer.scrollHeight - elements.messagesContainer.scrollTop - elements.messagesContainer.clientHeight;
+
+  if (isNear) {
+    state.unreadWhileScrolledCount = 0;
+    elements.scrollBottomBtn.classList.add('hidden');
+    if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+  } else {
+    if (state.unreadWhileScrolledCount > 0) {
+      if (elements.scrollBottomText) {
+        elements.scrollBottomText.textContent = state.unreadWhileScrolledCount === 1 ? 'New Message' : 'New Messages';
+      }
+      if (elements.scrollBottomBadge) {
+        elements.scrollBottomBadge.textContent = String(state.unreadWhileScrolledCount);
+        elements.scrollBottomBadge.classList.remove('hidden');
+      }
+      elements.scrollBottomBtn.classList.remove('hidden');
+    } else if (distanceFromBottom > 240) {
+      if (elements.scrollBottomText) {
+        elements.scrollBottomText.textContent = 'Latest Messages';
+      }
+      if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+      elements.scrollBottomBtn.classList.remove('hidden');
+    } else {
+      elements.scrollBottomBtn.classList.add('hidden');
+    }
+  }
 }
 
 function ensureDateDivider(createdAt) {
@@ -620,6 +666,9 @@ async function handleSendMessage() {
     });
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
+    state.unreadWhileScrolledCount = 0;
+    if (elements.scrollBottomBtn) elements.scrollBottomBtn.classList.add('hidden');
+    if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
 
     // Update conversation in sidebar
     state.activeConversation.last_message = savedMsg;
@@ -658,6 +707,7 @@ async function handleIncomingMessage(msg) {
         if (prevTail) prevTail.remove();
       }
 
+      const wasNearBottom = isMessagesScrolledNearBottom();
       const bubble = renderMessageBubble({
         id: msg.id,
         isMine: false,
@@ -666,7 +716,13 @@ async function handleIncomingMessage(msg) {
         isLastInCluster: true
       });
       elements.messagesContainer.appendChild(bubble);
-      scrollToBottom(elements.messagesContainer, true);
+
+      if (wasNearBottom) {
+        scrollToBottom(elements.messagesContainer, true);
+      } else {
+        state.unreadWhileScrolledCount++;
+        updateScrollBottomButtonVisibility();
+      }
     }
   }
 
@@ -710,7 +766,9 @@ function handleTypingChange({ conversationId, username, isTyping }) {
     if (!existing) {
       const typingBubble = renderTypingIndicator(username);
       elements.messagesContainer.appendChild(typingBubble);
-      scrollToBottom(elements.messagesContainer, true);
+      if (isMessagesScrolledNearBottom()) {
+        scrollToBottom(elements.messagesContainer, true);
+      }
     }
     // Auto-cleanup after 4 seconds if remote user closes tab or loses connection
     remoteTypingTimeout = setTimeout(() => {
@@ -938,6 +996,21 @@ function setupEventListeners() {
     }
   });
   elements.sendBtn.addEventListener('click', handleSendMessage);
+
+  if (elements.messagesContainer) {
+    elements.messagesContainer.addEventListener('scroll', () => {
+      updateScrollBottomButtonVisibility();
+    }, { passive: true });
+  }
+
+  if (elements.scrollBottomBtn) {
+    elements.scrollBottomBtn.addEventListener('click', () => {
+      scrollToBottom(elements.messagesContainer, true);
+      state.unreadWhileScrolledCount = 0;
+      elements.scrollBottomBtn.classList.add('hidden');
+      if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+    });
+  }
 
   elements.btnBack.addEventListener('click', () => {
     if (window.history.state?.chatActive) {

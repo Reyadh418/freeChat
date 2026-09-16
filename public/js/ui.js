@@ -29,6 +29,28 @@ export function formatDateDivider(dateInput) {
     : date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+export function linkify(escapedText) {
+  if (!escapedText) return '';
+  const urlRegex = /(https?:\/\/[^\s<&]+|www\.[^\s<&]+)/gi;
+  return escapedText.replace(urlRegex, (match) => {
+    const cleanUrl = match.replace(/[.,;:!?]+$/, '');
+    const trailing = match.slice(cleanUrl.length);
+    const href = cleanUrl.startsWith('www.') ? `https://${cleanUrl}` : cleanUrl;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="bubble-link">${cleanUrl}</a>${trailing}`;
+  });
+}
+
+export function isEmojiOnly(text) {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const emojiOnlyRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji_Modifier}|\p{Emoji_Component}|\uFE0F|\u200D|\s)+$/u;
+  if (!emojiOnlyRegex.test(trimmed)) return false;
+  const countRegex = /\p{Extended_Pictographic}/gu;
+  const matches = trimmed.match(countRegex);
+  return Boolean(matches && matches.length >= 1 && matches.length <= 3);
+}
+
 export function showToast(message, duration = 3000) {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -103,18 +125,29 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastIn
   row.id = `msg-${id}`;
   row.dataset.timestamp = new Date(createdAt).getTime();
 
+  const isJumbo = isEmojiOnly(plainText);
+  const formattedText = linkify(escapeHtml(plainText));
   const formattedTime = formatTime(createdAt);
 
-  const tailSvg = isLastInCluster ? `
+  const tailSvg = (isLastInCluster && !isJumbo) ? `
     <svg class="bubble-tail" viewBox="0 0 9 16" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
       <path d="M0,0 C1,5 3.5,12 8.5,15.2 C9,15.6 8.5,16 7,16 L0,16 Z"/>
     </svg>
   ` : '';
 
   row.innerHTML = `
-    <div class="bubble">
-      ${escapeHtml(plainText)}
-      ${tailSvg}
+    <div class="message-content-wrapper">
+      <div class="bubble ${isJumbo ? 'is-emoji-only' : ''}">
+        ${formattedText}
+        ${tailSvg}
+      </div>
+      <div class="message-actions">
+        <button class="message-action-btn copy-msg-btn" type="button" title="Copy message" aria-label="Copy message text">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="bubble-meta">
       <span>${formattedTime}</span>
@@ -127,6 +160,54 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastIn
       ` : ''}
     </div>
   `;
+
+  const bubbleEl = row.querySelector('.bubble');
+  const copyBtn = row.querySelector('.copy-msg-btn');
+
+  const executeCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(plainText);
+      showToast('Copied to clipboard', 1800);
+      if (copyBtn) {
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        `;
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+          `;
+        }, 1600);
+      }
+    } catch (err) {
+      console.warn('Clipboard copy error:', err);
+    }
+  };
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      executeCopy();
+    });
+  }
+
+  // Mobile double-tap to copy
+  let lastTapTime = 0;
+  if (bubbleEl) {
+    bubbleEl.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTapTime < 320 && now - lastTapTime > 0) {
+        e.preventDefault();
+        executeCopy();
+      }
+      lastTapTime = now;
+    });
+  }
 
   return row;
 }
