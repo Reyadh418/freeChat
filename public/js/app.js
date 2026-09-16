@@ -23,6 +23,12 @@ import {
 import { API } from './api.js';
 import { Realtime } from './socket.js';
 import {
+  isSoundEnabled,
+  toggleSoundEnabled,
+  playSentSound,
+  playReceivedSound
+} from './audio.js';
+import {
   showToast,
   renderConversationItem,
   renderMessageBubble,
@@ -30,7 +36,10 @@ import {
   renderDateDivider,
   formatDateDivider,
   scrollToBottom,
-  escapeHtml
+  escapeHtml,
+  triggerHaptic,
+  renderMessageSkeletons,
+  renderConversationSkeletons
 } from './ui.js';
 
 // State
@@ -50,11 +59,18 @@ const state = {
   onlineUsers: new Set(),
   searchQuery: '',
   isTypingTimer: null,
-  isTyping: false
+  isTyping: false,
+  unreadWhileScrolledCount: 0,
+  lastSentText: '',
+  drafts: {},
+  unreadBackgroundCount: 0
 };
 
 // Elements
 const elements = {
+  appFavicon: document.getElementById('app-favicon'),
+  searchShortcutBadge: document.getElementById('search-shortcut-badge'),
+  soundToggleBtn: document.getElementById('sound-toggle-btn'),
   themeToggleBtn: document.getElementById('theme-toggle-btn'),
   themeColorMeta: document.getElementById('theme-color-meta'),
   newChatBtn: document.getElementById('new-chat-btn'),
@@ -75,6 +91,9 @@ const elements = {
   headerVerifiedBadge: document.getElementById('header-verified-badge'),
   btnVerifySafetyNumber: document.getElementById('btn-verify-safety-number'),
   messagesContainer: document.getElementById('messages-container'),
+  scrollBottomBtn: document.getElementById('scroll-bottom-btn'),
+  scrollBottomText: document.getElementById('scroll-bottom-text'),
+  scrollBottomBadge: document.getElementById('scroll-bottom-badge'),
   composerInput: document.getElementById('composer-input'),
   sendBtn: document.getElementById('send-btn'),
   btnBack: document.getElementById('btn-back'),
@@ -117,6 +136,21 @@ let currentAuthMode = 'login';
 // Initialize
 async function initApp() {
   initTheme();
+  updateSoundToggleButton();
+
+  if (elements.searchShortcutBadge) {
+    const isMac = (navigator.platform && navigator.platform.toUpperCase().includes('MAC')) || 
+                  (navigator.userAgent && navigator.userAgent.includes('Mac'));
+    elements.searchShortcutBadge.textContent = isMac ? '⌘K' : 'Ctrl K';
+  }
+
+  window.addEventListener('focus', clearBackgroundNotification);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      clearBackgroundNotification();
+    }
+  });
+
   setupEventListeners();
 
   window.addEventListener('auth:expired', () => {
@@ -168,10 +202,29 @@ function initTheme() {
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
   const next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('freeChat_theme', next);
-  updateThemeColor(next);
-  updateThemeIcon(next);
+
+  const applyTheme = () => {
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('freeChat_theme', next);
+    updateThemeColor(next);
+    updateThemeIcon(next);
+  };
+
+  triggerHaptic('light');
+
+  if (document.startViewTransition) {
+    document.startViewTransition(applyTheme);
+  } else {
+    applyTheme();
+  }
+}
+
+function updateSoundToggleButton() {
+  if (!elements.soundToggleBtn) return;
+  const enabled = isSoundEnabled();
+  elements.soundToggleBtn.classList.toggle('muted', !enabled);
+  elements.soundToggleBtn.title = enabled ? 'Mute sound notifications' : 'Enable sound notifications';
+  elements.soundToggleBtn.setAttribute('aria-label', enabled ? 'Mute sound notifications' : 'Enable sound notifications');
 }
 
 function updateThemeColor(theme) {
@@ -186,6 +239,27 @@ function updateThemeIcon(theme) {
   elements.themeToggleBtn.innerHTML = theme === 'dark' 
     ? `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0s-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>`
     : `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>`;
+}
+
+const ORIGINAL_TITLE = 'freeChat • Private E2EE Messenger';
+const ORIGINAL_FAVICON = '/favicon.svg';
+const BADGE_FAVICON = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%230a84ff"/><stop offset="100%" stop-color="%23007aff"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(%23g)"/><path d="M22 13h-1V10c0-2.76-2.24-5-5-5s-5 2.24-5 5v3h-1c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V15c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H12.9V10c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v3z" fill="%23ffffff"/><circle cx="26" cy="6" r="5" fill="%23ff3b30" stroke="%23ffffff" stroke-width="1.5"/></svg>';
+
+function updateBackgroundNotification(senderName) {
+  if (!document.hidden) return;
+  state.unreadBackgroundCount++;
+  document.title = `(${state.unreadBackgroundCount}) ${senderName || 'New Message'} • freeChat`;
+  if (elements.appFavicon) {
+    elements.appFavicon.href = BADGE_FAVICON;
+  }
+}
+
+function clearBackgroundNotification() {
+  state.unreadBackgroundCount = 0;
+  document.title = ORIGINAL_TITLE;
+  if (elements.appFavicon) {
+    elements.appFavicon.href = ORIGINAL_FAVICON;
+  }
 }
 
 // Auth modal
@@ -398,6 +472,9 @@ async function onAuthSuccess() {
 
 // Conversations
 async function loadConversations() {
+  if (state.conversations.length === 0 && elements.conversationsList) {
+    renderConversationSkeletons(elements.conversationsList);
+  }
   try {
     const convs = await API.getConversations();
     state.conversations = convs;
@@ -512,6 +589,10 @@ async function selectConversation(conv) {
   elements.emptyChatState.style.display = 'none';
   elements.activeChatView.style.display = 'flex';
 
+  state.unreadWhileScrolledCount = 0;
+  if (elements.scrollBottomBtn) elements.scrollBottomBtn.classList.add('hidden');
+  if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+
   const isAlreadyActive = state.activeConversation?.id === conv.id;
 
   if (isAlreadyActive) {
@@ -520,8 +601,9 @@ async function selectConversation(conv) {
     return;
   }
 
-  // Leave previous room
+  // Leave previous room and save draft
   if (state.activeConversation) {
+    state.drafts[state.activeConversation.id] = elements.composerInput.value;
     Realtime.leaveConversation(state.activeConversation.id);
   }
 
@@ -585,7 +667,54 @@ async function selectConversation(conv) {
 
   renderConversationsList();
   await loadMessages(conv.id);
+
+  // Restore unsent draft if available
+  const savedDraft = state.drafts[conv.id] || '';
+  elements.composerInput.value = savedDraft;
+  elements.composerInput.style.height = 'auto';
+  if (savedDraft.trim().length > 0) {
+    elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+  }
+  updateSendButtonState();
   elements.composerInput.focus();
+}
+
+function isMessagesScrolledNearBottom() {
+  if (!elements.messagesContainer) return true;
+  const threshold = 120;
+  const distanceFromBottom = elements.messagesContainer.scrollHeight - elements.messagesContainer.scrollTop - elements.messagesContainer.clientHeight;
+  return distanceFromBottom <= threshold;
+}
+
+function updateScrollBottomButtonVisibility() {
+  if (!elements.scrollBottomBtn || !elements.messagesContainer) return;
+  const isNear = isMessagesScrolledNearBottom();
+  const distanceFromBottom = elements.messagesContainer.scrollHeight - elements.messagesContainer.scrollTop - elements.messagesContainer.clientHeight;
+
+  if (isNear) {
+    state.unreadWhileScrolledCount = 0;
+    elements.scrollBottomBtn.classList.add('hidden');
+    if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+  } else {
+    if (state.unreadWhileScrolledCount > 0) {
+      if (elements.scrollBottomText) {
+        elements.scrollBottomText.textContent = state.unreadWhileScrolledCount === 1 ? 'New Message' : 'New Messages';
+      }
+      if (elements.scrollBottomBadge) {
+        elements.scrollBottomBadge.textContent = String(state.unreadWhileScrolledCount);
+        elements.scrollBottomBadge.classList.remove('hidden');
+      }
+      elements.scrollBottomBtn.classList.remove('hidden');
+    } else if (distanceFromBottom > 240) {
+      if (elements.scrollBottomText) {
+        elements.scrollBottomText.textContent = 'Latest Messages';
+      }
+      if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+      elements.scrollBottomBtn.classList.remove('hidden');
+    } else {
+      elements.scrollBottomBtn.classList.add('hidden');
+    }
+  }
 }
 
 function ensureDateDivider(createdAt) {
@@ -600,15 +729,22 @@ function ensureDateDivider(createdAt) {
 }
 
 async function loadMessages(convId) {
-  elements.messagesContainer.innerHTML = `
-    <div style="text-align:center; padding: 20px; color: var(--text-secondary); font-size: 13px;">
-      🔒 Messages are end-to-end encrypted. No one outside of this chat can read them.
-    </div>
-  `;
+  renderMessageSkeletons(elements.messagesContainer);
 
   try {
     const messages = await API.getMessages(convId);
     if (state.activeConversation?.id !== convId) return;
+
+    elements.messagesContainer.innerHTML = '';
+
+    if (messages.length === 0) {
+      elements.messagesContainer.innerHTML = `
+        <div style="text-align:center; padding: 24px; color: var(--text-secondary); font-size: 13px;">
+          🔒 No messages yet. Say hello to start an encrypted conversation!
+        </div>
+      `;
+      return;
+    }
 
     let lastDateStr = null;
 
@@ -690,6 +826,15 @@ async function handleSendMessage() {
     });
     elements.messagesContainer.appendChild(bubble);
     scrollToBottom(elements.messagesContainer, true);
+    playSentSound();
+    triggerHaptic('light');
+    state.lastSentText = text;
+    if (state.activeConversation) {
+      delete state.drafts[state.activeConversation.id];
+    }
+    state.unreadWhileScrolledCount = 0;
+    if (elements.scrollBottomBtn) elements.scrollBottomBtn.classList.add('hidden');
+    if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
 
     // Update conversation in sidebar
     state.activeConversation.last_message = savedMsg;
@@ -701,6 +846,26 @@ async function handleSendMessage() {
   } catch (err) {
     console.error('[Send Error]:', err);
     showToast('Failed to send encrypted message.');
+
+    // Render failed message bubble with tap-to-retry
+    const failedBubble = renderMessageBubble({
+      id: 'failed-' + Date.now(),
+      isMine: true,
+      plainText: text,
+      createdAt: new Date().toISOString(),
+      isLastInCluster: true,
+      isFailed: true,
+      onRetry: (retryText, failedRow) => {
+        failedRow.remove();
+        elements.composerInput.value = retryText;
+        elements.composerInput.style.height = 'auto';
+        elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+        updateSendButtonState();
+        handleSendMessage();
+      }
+    });
+    elements.messagesContainer.appendChild(failedBubble);
+    scrollToBottom(elements.messagesContainer, true);
   }
 }
 
@@ -728,6 +893,7 @@ async function handleIncomingMessage(msg) {
         if (prevTail) prevTail.remove();
       }
 
+      const wasNearBottom = isMessagesScrolledNearBottom();
       const bubble = renderMessageBubble({
         id: msg.id,
         isMine: false,
@@ -736,8 +902,20 @@ async function handleIncomingMessage(msg) {
         isLastInCluster: true
       });
       elements.messagesContainer.appendChild(bubble);
-      scrollToBottom(elements.messagesContainer, true);
+
+      playReceivedSound();
+      triggerHaptic('double');
+      updateBackgroundNotification(state.activeTargetUser?.username || 'New Message');
+
+      if (wasNearBottom) {
+        scrollToBottom(elements.messagesContainer, true);
+      } else {
+        state.unreadWhileScrolledCount++;
+        updateScrollBottomButtonVisibility();
+      }
     }
+  } else if (msg.sender_id !== state.currentUser?.id) {
+    updateBackgroundNotification('New Message');
   }
 
   loadConversations();
@@ -780,7 +958,9 @@ function handleTypingChange({ conversationId, username, isTyping }) {
     if (!existing) {
       const typingBubble = renderTypingIndicator(username);
       elements.messagesContainer.appendChild(typingBubble);
-      scrollToBottom(elements.messagesContainer, true);
+      if (isMessagesScrolledNearBottom()) {
+        scrollToBottom(elements.messagesContainer, true);
+      }
     }
     // Auto-cleanup after 4 seconds if remote user closes tab or loses connection
     remoteTypingTimeout = setTimeout(() => {
@@ -1042,6 +1222,14 @@ function handleToggleVerifyContact() {
 
 // Event listeners
 function setupEventListeners() {
+  if (elements.soundToggleBtn) {
+    elements.soundToggleBtn.addEventListener('click', () => {
+      toggleSoundEnabled();
+      updateSoundToggleButton();
+      triggerHaptic('light');
+    });
+  }
+
   elements.themeToggleBtn.addEventListener('click', toggleTheme);
 
   elements.tabLogin.addEventListener('click', () => showAuthModal('login'));
@@ -1133,8 +1321,29 @@ function setupEventListeners() {
     }
   });
 
+  // Global spotlight search shortcut (Cmd+K / Ctrl+K)
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (elements.searchConvInput) {
+        elements.searchConvInput.focus();
+        elements.searchConvInput.select();
+      }
+    }
+  });
+
   elements.composerInput.addEventListener('input', handleTypingInput);
   elements.composerInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' && elements.composerInput.value.trim() === '' && state.lastSentText) {
+      e.preventDefault();
+      elements.composerInput.value = state.lastSentText;
+      elements.composerInput.style.height = 'auto';
+      elements.composerInput.style.height = Math.min(elements.composerInput.scrollHeight, 120) + 'px';
+      elements.composerInput.setSelectionRange(state.lastSentText.length, state.lastSentText.length);
+      updateSendButtonState();
+      return;
+    }
+
     const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isMobileViewport) {
@@ -1146,6 +1355,21 @@ function setupEventListeners() {
     }
   });
   elements.sendBtn.addEventListener('click', handleSendMessage);
+
+  if (elements.messagesContainer) {
+    elements.messagesContainer.addEventListener('scroll', () => {
+      updateScrollBottomButtonVisibility();
+    }, { passive: true });
+  }
+
+  if (elements.scrollBottomBtn) {
+    elements.scrollBottomBtn.addEventListener('click', () => {
+      scrollToBottom(elements.messagesContainer, true);
+      state.unreadWhileScrolledCount = 0;
+      elements.scrollBottomBtn.classList.add('hidden');
+      if (elements.scrollBottomBadge) elements.scrollBottomBadge.classList.add('hidden');
+    });
+  }
 
   elements.btnBack.addEventListener('click', () => {
     if (window.history.state?.chatActive) {

@@ -207,3 +207,33 @@
   color: var(--text-secondary);
 }
 
+/* Glass Skeleton Shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.glass-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-input) 0%,
+    var(--bg-item-active) 50%,
+    var(--bg-input) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite ease-in-out;
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+/* View Transitions API (Theme Switch Cross-Fade) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.28s;
+  animation-timing-function: var(--spring-smooth);
+}
+
