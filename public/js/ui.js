@@ -171,9 +171,9 @@ export function renderConversationItem(conv, currentUserId, isActive = false, on
   return div;
 }
 
-export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastInCluster = true }) {
+export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastInCluster = true, isFailed = false, onRetry = null }) {
   const row = document.createElement('div');
-  row.className = `message-row ${isMine ? 'sent' : 'received'} ${isLastInCluster ? 'has-tail' : 'clustered'}`;
+  row.className = `message-row ${isMine ? 'sent' : 'received'} ${isLastInCluster ? 'has-tail' : 'clustered'} ${isFailed ? 'failed' : ''}`;
   row.id = `msg-${id}`;
   row.dataset.timestamp = new Date(createdAt).getTime();
 
@@ -186,6 +186,23 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastIn
       <path d="M0,0 C1,5 3.5,12 8.5,15.2 C9,15.6 8.5,16 7,16 L0,16 Z"/>
     </svg>
   ` : '';
+
+  const deliveryBadgeHtml = isMine ? (
+    isFailed ? `
+      <span class="delivery-badge failed retry-btn" role="button" tabindex="0" title="Not Delivered. Tap to retry.">
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+        <span>Not Delivered • Retry</span>
+      </span>
+    ` : `
+      <span class="delivery-badge" title="Delivered">
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+        </svg>
+      </span>
+    `
+  ) : '';
 
   row.innerHTML = `
     <div class="message-content-wrapper">
@@ -203,18 +220,27 @@ export function renderMessageBubble({ id, isMine, plainText, createdAt, isLastIn
     </div>
     <div class="bubble-meta">
       <span>${formattedTime}</span>
-      ${isMine ? `
-        <span class="delivery-badge" title="Delivered">
-          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-        </span>
-      ` : ''}
+      ${deliveryBadgeHtml}
     </div>
   `;
 
   const bubbleEl = row.querySelector('.bubble');
   const copyBtn = row.querySelector('.copy-msg-btn');
+  const retryBtn = row.querySelector('.retry-btn');
+
+  if (retryBtn && typeof onRetry === 'function') {
+    const handleRetry = (e) => {
+      e.stopPropagation();
+      onRetry(plainText, row);
+    };
+    retryBtn.addEventListener('click', handleRetry);
+    retryBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleRetry(e);
+      }
+    });
+  }
 
   const executeCopy = async () => {
     try {

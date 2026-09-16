@@ -113,6 +113,20 @@
   color: var(--text-secondary);
 }
 
+.search-shortcut-badge {
+  font-size: 11px;
+  font-family: var(--font-system);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-item-active);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-glass);
+  pointer-events: none;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
 /* Conversation list */
 .conversations-list {
   flex: 1;
@@ -399,6 +413,26 @@
   display: inline-flex;
   align-items: center;
   color: var(--imessage-blue-start);
+}
+
+.delivery-badge.failed {
+  color: var(--badge-bg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+  transition: transform var(--duration-fast);
+}
+
+.delivery-badge.failed:hover {
+  transform: scale(1.05);
+  text-decoration: underline;
+}
+
+.message-row.failed .bubble {
+  opacity: 0.92;
+  border: 1px solid rgba(255, 59, 48, 0.4);
 }
 
 .message-row.sent .bubble-meta {
