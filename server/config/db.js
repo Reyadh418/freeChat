@@ -72,6 +72,14 @@ export function withWriteLock(fn) {
 }
 
 /**
+ * Awaits completion of all currently queued write operations.
+ * Used during graceful shutdown to prevent data loss or truncation.
+ */
+export async function waitForPendingWrites() {
+  return writeLockChain;
+}
+
+/**
  * Performs atomic file replacement to ensure zero data truncation or corruption
  * during unexpected server terminations or concurrent operations.
  */
