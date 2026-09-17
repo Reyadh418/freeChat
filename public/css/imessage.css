@@ -312,6 +312,8 @@
   flex-direction: column;
   max-width: 68%;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 45px;
   animation: bubblePop 0.28s var(--spring-bounce) forwards;
 }
 
