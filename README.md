@@ -366,27 +366,58 @@ When launched from the home screen, freeChat runs full-screen with native iOS sa
 
 ## 🌐 Production Deployment
 
-### Deploying to Render.com (100% Free)
+### Option A: 1-Click Render.com Blueprint (Recommended)
+
+freeChat includes a pre-configured `render.yaml` infrastructure specification:
 
 1. Push your repository to GitHub:
    ```bash
    git add .
-   git commit -m "Deploy freeChat"
+   git commit -m "Production-ready freeChat"
    git push origin main
    ```
-2. Log in to [Render.com](https://render.com) and click **New + $\rightarrow$ Web Service**.
-3. Connect your GitHub repository.
-4. Configure service settings:
-   - **Environment**: `Node`
+2. Log in to [Render.com](https://render.com) and navigate to **Blueprints** $\rightarrow$ **New Blueprint Instance**.
+3. Select your repository. Render automatically reads `render.yaml`, configures the Node service, sets up zero-downtime healthchecks (`/api/health`), and generates a cryptographically secure `JWT_SECRET`.
+4. Enter your `SUPABASE_URL` and `SUPABASE_KEY` (service_role key), then click **Apply**.
+
+### Option B: Manual Cloud Setup (Render, Railway, Fly.io, Heroku)
+
+1. Connect your GitHub repository to your cloud platform.
+2. Configure build & start commands:
    - **Build Command**: `npm install`
    - **Start Command**: `npm start`
-   - **Instance Type**: `Free`
-5. Under **Environment Variables**, add:
+   - **Healthcheck Path**: `/api/health`
+3. Set the following **Environment Variables**:
    - `NODE_ENV`: `production`
-   - `JWT_SECRET`: *(A secure random 64-character string)*
-   - `SUPABASE_URL`: *(Your Supabase project URL)*
-   - `SUPABASE_KEY`: *(Your Supabase anon/service key)*
-6. Click **Create Web Service**. Your private encrypted messenger is live with automatic free SSL/TLS!
+   - `TRUST_PROXY`: `true`
+   - `JWT_SECRET`: *(A random 64-character string)*
+   - `SUPABASE_URL`: *(Your Supabase project URL, e.g. `https://xyz.supabase.co`)*
+   - `SUPABASE_KEY`: *(IMPORTANT: Your Supabase **service_role** key to operate with RLS)*
+   - `ALLOWED_ORIGINS`: *(Your custom domain, e.g. `https://mychat.com`)*
+
+### Option C: Docker Container Deployment
+
+freeChat includes an optimized, non-root Alpine container:
+
+```bash
+# 1. Build the Docker image
+docker build -t freechat .
+
+# 2. Run the container
+docker run -d \
+  --name freechat \
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e JWT_SECRET="your-strong-random-secret-key-at-least-32-chars" \
+  -e SUPABASE_URL="https://your-project.supabase.co" \
+  -e SUPABASE_KEY="your-supabase-service-role-secret-key" \
+  freechat
+```
+
+Verify container health:
+```bash
+docker inspect --format='{{json .State.Health.Status}}' freechat
+```
 
 ---
 
