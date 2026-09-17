@@ -9,6 +9,10 @@
     "dev": "node --watch server/server.js",
     "test": "node test/verify.js"
   },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "keywords": [
     "e2ee",
     "chat",

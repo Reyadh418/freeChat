@@ -250,7 +250,8 @@ cp .env.example .env
 | `PORT` | Optional | `3000` | HTTP and WebSocket listening port |
 | `JWT_SECRET` | Recommended | *Built-in dev key* | Secret for signing session tokens (must be a strong 64-character key in production) |
 | `SUPABASE_URL` | Optional | *Empty (Local mode)* | Full Supabase project URL (`https://your-project-id.supabase.co`) |
-| `SUPABASE_KEY` | Optional | *Empty (Local mode)* | Supabase `anon` or `service_role` API key |
+| `SUPABASE_KEY` | Optional | *Empty (Local mode)* | Supabase `service_role` secret API key (required for server-side RLS operations) |
+| `ALLOWED_ORIGINS` | Optional | *Auto / Empty* | Comma-separated CORS whitelist (leave empty for automatic same-origin and cloud detection) |
 | `NODE_ENV` | Optional | `development` | Environment mode (`development` or `production`) |
 
 ---
@@ -268,11 +269,11 @@ For scalable, multi-device cloud storage:
 
 1. Create a project at [Supabase.com](https://supabase.com).
 2. In the Supabase Dashboard, open the **SQL Editor** and run the contents of [`database/schema.sql`](database/schema.sql).
-3. Copy your **Project URL** and **API Key** from *Project Settings $\rightarrow$ API*.
+3. Copy your **Project URL** and **service_role secret key** from *Project Settings $\rightarrow$ API*.
 4. Update your `.env` file:
    ```env
    SUPABASE_URL=https://your-project-id.supabase.co
-   SUPABASE_KEY=your-supabase-anon-key
+   SUPABASE_KEY=your-supabase-service-role-secret-key
    ```
 5. Restart the server (`npm start`). freeChat will automatically connect to Supabase PostgreSQL.
 

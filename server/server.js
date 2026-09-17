@@ -33,16 +33,18 @@ const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
   maxHttpBufferSize: 256 * 1024, // 256KB max WebSocket frame to prevent memory exhaustion
-  cors: {
-    origin: (origin, callback) => {
-      if (isOriginAllowed(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('CORS policy: Socket connection denied for this origin.'));
-      }
-    },
-    methods: ['GET', 'POST'],
-    credentials: true
+  cors: (req, callback) => {
+    const origin = req.headers ? req.headers.origin : null;
+    const host = req.headers ? (req.headers['x-forwarded-host'] || req.headers.host) : null;
+    if (isOriginAllowed(origin, host)) {
+      callback(null, {
+        origin: true,
+        methods: ['GET', 'POST'],
+        credentials: true
+      });
+    } else {
+      callback(new Error('CORS policy: Socket connection denied for this origin.'));
+    }
   }
 });
 

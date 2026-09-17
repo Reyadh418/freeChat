@@ -13,18 +13,54 @@ export function getAllowedOrigins() {
 }
 
 /**
- * Validates whether a given origin is permitted
+ * Validates whether a given origin is permitted.
+ * Supports same-origin requests (origin matches incoming host header),
+ * auto-discovered cloud deployment environments (Render, Railway, Fly.io),
+ * explicit ALLOWED_ORIGINS whitelist, and local development.
  */
-export function isOriginAllowed(origin) {
+export function isOriginAllowed(origin, host = null) {
   // Allow requests without Origin header (same-origin, curl, mobile apps, Postman)
   if (!origin) return true;
 
   const normOrigin = origin.toLowerCase().replace(/\/$/, '');
   const whitelist = getAllowedOrigins();
 
-  // If explicit whitelist is configured, check against whitelist
-  if (whitelist.length > 0) {
-    return whitelist.includes(normOrigin);
+  // Auto-discover cloud platform deployment URLs
+  if (process.env.RENDER_EXTERNAL_URL) {
+    whitelist.push(process.env.RENDER_EXTERNAL_URL.toLowerCase().replace(/\/$/, ''));
+  }
+  if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+    whitelist.push(`https://${process.env.RENDER_EXTERNAL_HOSTNAME.toLowerCase()}`);
+  }
+  if (process.env.RAILWAY_STATIC_URL) {
+    whitelist.push(`https://${process.env.RAILWAY_STATIC_URL.toLowerCase().replace(/\/$/, '')}`);
+  }
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    whitelist.push(`https://${process.env.RAILWAY_PUBLIC_DOMAIN.toLowerCase().replace(/\/$/, '')}`);
+  }
+  if (process.env.FLY_APP_NAME) {
+    whitelist.push(`https://${process.env.FLY_APP_NAME.toLowerCase()}.fly.dev`);
+  }
+
+  // If origin is in explicit or auto-discovered whitelist
+  if (whitelist.includes(normOrigin)) {
+    return true;
+  }
+
+  // Same-origin verification: allow if origin host matches the server's Host header
+  if (host) {
+    try {
+      const url = new URL(normOrigin);
+      const hostOnly = host.toLowerCase().split(':')[0];
+      if (url.hostname === hostOnly) {
+        return true;
+      }
+    } catch {}
+  }
+
+  // If explicit ALLOWED_ORIGINS whitelist is configured and origin did not match, deny
+  if (getAllowedOrigins().length > 0) {
+    return false;
   }
 
   // Development/default mode: allow localhost and 127.0.0.1 on any port
@@ -37,7 +73,7 @@ export function isOriginAllowed(origin) {
     return false;
   }
 
-  // If in production without explicit whitelist, reject external origins
+  // If in production without matching host or whitelist, reject external origins
   if (process.env.NODE_ENV === 'production') {
     return false;
   }
@@ -47,21 +83,39 @@ export function isOriginAllowed(origin) {
 }
 
 /**
- * CORS Configuration options for Express cors middleware
+ * Dynamic CORS options delegate for Express cors middleware.
+ * Inspects incoming request headers (Origin, Host, X-Forwarded-Host)
+ * to transparently support same-origin requests and cloud domains.
  */
-export const corsOptions = {
-  origin: (origin, callback) => {
-    if (isOriginAllowed(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS policy: Access denied for this origin.'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  maxAge: 86400 // Cache preflight for 24 hours
+export const corsOptions = (req, callback) => {
+  const origin = req.headers ? req.headers.origin : null;
+  const host = req.headers ? (req.headers['x-forwarded-host'] || req.headers.host) : null;
+
+  if (isOriginAllowed(origin, host)) {
+    callback(null, {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: true,
+      maxAge: 86400 // Cache preflight for 24 hours
+    });
+  } else {
+    callback(new Error('CORS policy: Access denied for this origin.'));
+  }
 };
+
+// Preserve backward-compatible property interface for direct invocations (e.g. test suites)
+corsOptions.origin = (origin, callback) => {
+  if (isOriginAllowed(origin)) {
+    callback(null, true);
+  } else {
+    callback(new Error('CORS policy: Access denied for this origin.'));
+  }
+};
+corsOptions.methods = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
+corsOptions.allowedHeaders = ['Content-Type', 'Authorization'];
+corsOptions.credentials = true;
+corsOptions.maxAge = 86400;
 
 /**
  * Comprehensive HTTP Security Headers Middleware

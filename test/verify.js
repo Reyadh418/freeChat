@@ -824,6 +824,23 @@ async function testHttpSecurityHeadersAndRestrictedCors() {
   }
   delete process.env.ALLOWED_ORIGINS;
   console.log('  ✅ Whitelist Configuration: ALLOWED_ORIGINS environment variable strictly enforced');
+
+  // 5. Test Production Same-Origin Host Matching & Cloud Platform Auto-Discovery
+  const origNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  if (!isOriginAllowed('https://freechat-app.onrender.com', 'freechat-app.onrender.com')) {
+    throw new Error('Same-origin request matching Host header should be allowed in production');
+  }
+  if (isOriginAllowed('https://attacker-origin.com', 'freechat-app.onrender.com')) {
+    throw new Error('Attacker origin should be blocked even when Host header is present');
+  }
+  process.env.RENDER_EXTERNAL_URL = 'https://freechat-render.onrender.com';
+  if (!isOriginAllowed('https://freechat-render.onrender.com')) {
+    throw new Error('Platform auto-discovered RENDER_EXTERNAL_URL should be permitted');
+  }
+  delete process.env.RENDER_EXTERNAL_URL;
+  process.env.NODE_ENV = origNodeEnv;
+  console.log('  ✅ Production Same-Origin & Cloud Auto-Discovery: Same-origin requests permitted, cross-origin attacks blocked');
 }
 
 // 12. Rate Limiting & DoS Defense Tests
