@@ -79,11 +79,15 @@ export async function waitForPendingWrites() {
   return writeLockChain;
 }
 
+let memoryCache = null;
+let lastCacheMtime = 0;
+
 /**
  * Performs atomic file replacement to ensure zero data truncation or corruption
  * during unexpected server terminations or concurrent operations.
  */
 export function saveLocalData(data) {
+  memoryCache = data;
   const json = JSON.stringify(data, null, 2);
   const tempPath = `${localDbPath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
   fs.writeFileSync(tempPath, json, 'utf-8');
@@ -98,6 +102,12 @@ export function saveLocalData(data) {
       throw err;
     }
   }
+
+  try {
+    lastCacheMtime = fs.statSync(localDbPath).mtimeMs;
+  } catch {
+    lastCacheMtime = Date.now();
+  }
 }
 
 export function loadLocalData() {
@@ -111,8 +121,17 @@ export function loadLocalData() {
     saveLocalData(initial);
     return initial;
   }
+
   try {
-    return JSON.parse(fs.readFileSync(localDbPath, 'utf-8'));
+    const stats = fs.statSync(localDbPath);
+    if (memoryCache && stats.mtimeMs <= lastCacheMtime) {
+      return memoryCache;
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(localDbPath, 'utf-8'));
+    memoryCache = parsed;
+    lastCacheMtime = stats.mtimeMs;
+    return parsed;
   } catch (err) {
     console.error('[DATABASE CORRUPTION DETECTED] Failed to parse local_db.json:', err.message);
     try {
@@ -120,7 +139,10 @@ export function loadLocalData() {
       fs.copyFileSync(localDbPath, corruptBackup);
       console.warn(`[DATABASE RECOVERY] Corrupt database safely backed up to: ${corruptBackup}`);
     } catch {}
-    return { users: [], conversations: [], conversation_participants: [], messages: [] };
+    const fresh = { users: [], conversations: [], conversation_participants: [], messages: [] };
+    memoryCache = fresh;
+    lastCacheMtime = Date.now();
+    return fresh;
   }
 }
 
@@ -340,20 +362,28 @@ export const db = {
         .from('conversations')
         .select(`
           id, type, title, created_at, updated_at,
-          conversation_participants(user_id, role, users(id, username, public_key, avatar_color, status_message, last_seen)),
-          messages(id, sender_id, ciphertext, iv, created_at)
+          conversation_participants(user_id, role, users(id, username, public_key, avatar_color, status_message, last_seen))
         `)
         .in('id', convIds)
         .order('updated_at', { ascending: false });
       if (convError) throw convError;
-      return (convs || []).map(c => {
-        const msgs = c.messages || [];
-        const sorted = msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        return {
-          ...c,
-          last_message: sorted[sorted.length - 1] || null
-        };
-      });
+
+      // Fetch only the single latest message per conversation in parallel
+      const lastMessagesPromises = (convs || []).map(conv =>
+        supabase
+          .from('messages')
+          .select('id, sender_id, ciphertext, iv, created_at')
+          .eq('conversation_id', conv.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      );
+      const lastMessagesResults = await Promise.all(lastMessagesPromises);
+
+      return (convs || []).map((c, idx) => ({
+        ...c,
+        last_message: lastMessagesResults[idx]?.data || null
+      }));
     } else {
       const data = loadLocalData();
       const myConvIds = data.conversation_participants
@@ -364,10 +394,13 @@ export const db = {
         .filter(c => myConvIds.includes(c.id))
         .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
+      // Build participant index map for O(1) lookups
+      const userMap = new Map(data.users.map(u => [u.id, u]));
+
       return convs.map(conv => {
         const parts = data.conversation_participants.filter(p => p.conversation_id === conv.id);
         const hydratedParticipants = parts.map(p => {
-          const user = data.users.find(u => u.id === p.user_id);
+          const user = userMap.get(p.user_id);
           return {
             user_id: p.user_id,
             role: p.role,
@@ -382,10 +415,14 @@ export const db = {
           };
         });
 
-        const convMessages = data.messages
-          .filter(m => m.conversation_id === conv.id)
-          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        const lastMsg = convMessages.length > 0 ? convMessages[convMessages.length - 1] : null;
+        // Scan backwards for last message in O(1)-O(M) without sorting entire history
+        let lastMsg = null;
+        for (let i = data.messages.length - 1; i >= 0; i--) {
+          if (data.messages[i].conversation_id === conv.id) {
+            lastMsg = data.messages[i];
+            break;
+          }
+        }
 
         return {
           ...conv,
