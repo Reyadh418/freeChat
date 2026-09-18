@@ -10,10 +10,15 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const rawSupabaseUrl = (process.env.SUPABASE_URL || '').trim();
+export const cleanSupabaseUrl = rawSupabaseUrl
+  .replace(/\/rest\/v1\/?$/i, '')
+  .replace(/\/+$/, '');
+
 const isSupabaseConfigured = Boolean(
-  process.env.SUPABASE_URL && 
+  cleanSupabaseUrl && 
   process.env.SUPABASE_KEY && 
-  !process.env.SUPABASE_URL.includes('your-project-id')
+  !cleanSupabaseUrl.includes('your-project-id')
 );
 
 /**
@@ -47,7 +52,7 @@ let supabase = null;
 
 if (isSupabaseConfigured) {
   validateSupabaseKey(process.env.SUPABASE_KEY);
-  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  supabase = createClient(cleanSupabaseUrl, process.env.SUPABASE_KEY);
 }
 
 // Local fallback store
