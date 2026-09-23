@@ -1255,6 +1255,115 @@ async function testDeepHardeningAndInputValidation() {
   console.log('  ✅ Real-time Typing Throttling: Blocks room flooding from rapid typing emissions');
 }
 
+// 16. PWA Manifest, Apple Touch & Homescreen Icon Integrity Tests
+async function testPwaAssetsAndIconIntegrity() {
+  console.log('\n[16/16] Testing PWA Manifest, Apple Touch & Homescreen Icon Assets Integrity...');
+  const fs = await import('fs');
+  const path = await import('path');
+  const zlib = await import('zlib');
+  const publicDir = path.resolve('public');
+
+  // 1. Verify manifest.json
+  const manifestPath = path.join(publicDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error('manifest.json does not exist');
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  if (!Array.isArray(manifest.icons) || manifest.icons.length < 4) {
+    throw new Error('manifest.json must define at least 4 icons');
+  }
+
+  const anyIcons = manifest.icons.filter(i => i.purpose === 'any' || !i.purpose);
+  const maskableIcons = manifest.icons.filter(i => i.purpose === 'maskable');
+
+  if (anyIcons.length < 2) {
+    throw new Error('manifest.json missing standard purpose="any" icons');
+  }
+  if (maskableIcons.length < 2) {
+    throw new Error('manifest.json missing purpose="maskable" icons');
+  }
+  if (manifest.theme_color !== '#1c1c1e') {
+    throw new Error(`Expected theme_color #1c1c1e in manifest.json, got: ${manifest.theme_color}`);
+  }
+  console.log('  ✅ Manifest Icon Schema: Properly separates purpose="any" from purpose="maskable" with valid theme colors');
+
+  // 2. Verify index.html contains apple-touch-icon links
+  const indexPath = path.join(publicDir, 'index.html');
+  const indexHtml = fs.readFileSync(indexPath, 'utf8');
+  if (!indexHtml.includes('rel="apple-touch-icon"') || !indexHtml.includes('/apple-touch-icon.png')) {
+    throw new Error('index.html is missing <link rel="apple-touch-icon" href="/apple-touch-icon.png">');
+  }
+  console.log('  ✅ Apple Mobile Web App Integration: <link rel="apple-touch-icon"> declared for iOS Safari home screen');
+
+  // 3. Verify sw.js cache includes all icon assets and updated cache version
+  const swPath = path.join(publicDir, 'sw.js');
+  const swJs = fs.readFileSync(swPath, 'utf8');
+  if (!swJs.includes('freechat-cache-v12')) {
+    throw new Error('sw.js cache version was not bumped to freechat-cache-v12');
+  }
+  const requiredAssets = [
+    '/icon-192.png',
+    '/icon-512.png',
+    '/icon-maskable-192.png',
+    '/icon-maskable-512.png',
+    '/apple-touch-icon.png'
+  ];
+  for (const asset of requiredAssets) {
+    if (!swJs.includes(`'${asset}'`)) {
+      throw new Error(`sw.js STATIC_ASSETS missing: ${asset}`);
+    }
+  }
+  console.log('  ✅ Service Worker Caching: Updated cache version freechat-cache-v12 and registered all icon assets');
+
+  // 4. Verify icon image binary files and dimensions
+  const iconExpectations = [
+    { file: 'icon-192.png', width: 192, height: 192 },
+    { file: 'icon-512.png', width: 512, height: 512 },
+    { file: 'icon-maskable-192.png', width: 192, height: 192 },
+    { file: 'icon-maskable-512.png', width: 512, height: 512 },
+    { file: 'apple-touch-icon.png', width: 180, height: 180 }
+  ];
+
+  for (const spec of iconExpectations) {
+    const iconPath = path.join(publicDir, spec.file);
+    if (!fs.existsSync(iconPath)) {
+      throw new Error(`Missing icon file on disk: ${spec.file}`);
+    }
+    const buf = fs.readFileSync(iconPath);
+    if (buf.length < 2000) {
+      throw new Error(`Icon file ${spec.file} is suspiciously small (${buf.length} bytes), likely missing emblem graphic`);
+    }
+    // PNG signature check
+    if (buf.readUInt32BE(0) !== 0x89504E47 || buf.readUInt32BE(4) !== 0x0D0A1A0A) {
+      throw new Error(`File ${spec.file} is not a valid PNG`);
+    }
+    const w = buf.readUInt32BE(16);
+    const h = buf.readUInt32BE(20);
+    if (w !== spec.width || h !== spec.height) {
+      throw new Error(`Dimension mismatch for ${spec.file}: expected ${spec.width}x${spec.height}, got ${w}x${h}`);
+    }
+    // Verify IDAT is present and decompressible
+    let offset = 8;
+    const idatChunks = [];
+    while (offset < buf.length) {
+      const len = buf.readUInt32BE(offset);
+      const type = buf.toString('ascii', offset + 4, offset + 8);
+      if (type === 'IDAT') {
+        idatChunks.push(buf.subarray(offset + 8, offset + 8 + len));
+      }
+      offset += 12 + len;
+    }
+    if (idatChunks.length === 0) {
+      throw new Error(`No IDAT chunk found in ${spec.file}`);
+    }
+    const decompressed = zlib.inflateSync(Buffer.concat(idatChunks));
+    if (decompressed.length === 0) {
+      throw new Error(`Failed to decompress pixel data for ${spec.file}`);
+    }
+  }
+  console.log('  ✅ PNG Binary Integrity & Dimensions: Verified all 5 PNG icons, valid dimensions, non-empty graphics');
+}
+
 async function runAllTests() {
   try {
     await testCryptoEngine();
@@ -1272,6 +1381,7 @@ async function runAllTests() {
     await testDatabaseRowLevelSecuritySchema();
     await testLocalStorageAtomicWritesAndConcurrency();
     await testDeepHardeningAndInputValidation();
+    await testPwaAssetsAndIconIntegrity();
     console.log('\n====================================================');
     console.log('🎉 ALL AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
