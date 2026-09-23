@@ -1,11 +1,14 @@
 // Cache version
-const CACHE_NAME = 'freechat-cache-v11';
+const CACHE_NAME = 'freechat-cache-v12';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/favicon.svg',
+  '/apple-touch-icon.png',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon-maskable-192.png',
+  '/icon-maskable-512.png',
   '/css/variables.css',
   '/css/glass.css',
   '/css/main.css',
