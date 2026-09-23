@@ -230,7 +230,11 @@ function updateSoundToggleButton() {
 function updateThemeColor(theme) {
   const meta = elements.themeColorMeta || document.getElementById('theme-color-meta');
   if (meta) {
-    meta.setAttribute('content', theme === 'dark' ? '#000000' : '#f2f2f7');
+    meta.setAttribute('content', theme === 'dark' ? '#1c1c1e' : '#f2f2f7');
+  }
+  const statusBarMeta = document.getElementById('apple-status-bar-meta');
+  if (statusBarMeta) {
+    statusBarMeta.setAttribute('content', theme === 'dark' ? 'black-translucent' : 'default');
   }
 }
 

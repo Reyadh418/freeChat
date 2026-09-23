@@ -10,10 +10,16 @@
 }
 
 .sidebar-header {
-  padding: 16px 20px 12px;
+  min-height: calc(56px + env(safe-area-inset-top, 0px));
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  padding-bottom: 10px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .sidebar-title {
@@ -80,7 +86,8 @@
 
 /* Search bar */
 .search-bar-container {
-  padding: 0 16px 12px;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px));
+  flex-shrink: 0;
 }
 
 .search-pill {
@@ -132,9 +139,12 @@
   flex: 1;
   overflow-y: auto;
   padding: 4px 8px;
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .conv-item {
@@ -201,11 +211,17 @@
 
 /* Sidebar footer */
 .sidebar-footer {
-  padding: 12px 16px;
+  min-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-top: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--border-glass);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .user-profile-summary {
@@ -239,33 +255,47 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  min-width: 0;
 }
 
 /* Chat header */
 .chat-header {
-  height: 64px;
-  padding: 0 20px;
+  min-height: calc(56px + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
   z-index: 5;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .chat-header-info {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .chat-header-details {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .chat-header-name {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.3px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-header-subtitle {
@@ -274,27 +304,42 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .e2e-lock-icon {
   width: 12px;
   height: 12px;
   fill: var(--status-online);
+  flex-shrink: 0;
 }
 
 .btn-back {
   display: none;
   margin-right: 4px;
+  flex-shrink: 0;
 }
 
 /* Messages */
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 16px 20px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 6px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .date-divider {
@@ -647,11 +692,16 @@
 
 /* Composer */
 .chat-composer {
-  padding: 12px 20px 16px;
+  padding-top: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: flex;
   align-items: center;
   gap: 12px;
   z-index: 5;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .composer-pill {
@@ -880,7 +930,7 @@
 /* Floating Scroll-to-Bottom Pill */
 .scroll-bottom-pill {
   position: absolute;
-  bottom: 74px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%) translateY(0);
   z-index: 25;
@@ -914,7 +964,7 @@
 
 .scroll-bottom-pill.hidden {
   opacity: 0;
-  transform: translateX(-50%) translateY(16px) scale(0.85);
+  transform: translateX(-50%) translateY(calc(16px + env(safe-area-inset-bottom, 0px))) scale(0.85);
   pointer-events: none;
 }
 
@@ -948,12 +998,58 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  :root {
+    --notch-clearance-top: max(env(safe-area-inset-top, 0px), 56px);
+    --notch-clearance-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+  }
+
   .app-container {
     width: 100vw;
     height: 100vh;
     height: 100dvh;
     position: relative;
     overflow: hidden;
+    padding: 0;
+  }
+
+  /* Keep top notch area empty and lower sidebar header items */
+  .sidebar-header {
+    min-height: calc(56px + max(env(safe-area-inset-top, 0px), 56px));
+    padding-top: calc(max(env(safe-area-inset-top, 0px), 56px) + 6px);
+    padding-bottom: 12px;
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+  }
+
+  /* Keep top notch area empty and lower chat header items */
+  .chat-header {
+    min-height: calc(56px + max(env(safe-area-inset-top, 0px), 56px));
+    padding-top: max(env(safe-area-inset-top, 0px), 56px);
+    padding-bottom: 6px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* Ensure bottom areas comfortably clear home indicator */
+  .sidebar-footer {
+    min-height: calc(56px + max(env(safe-area-inset-bottom, 0px), 16px));
+    padding-bottom: calc(10px + max(env(safe-area-inset-bottom, 0px), 16px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .chat-composer {
+    padding-bottom: calc(10px + max(env(safe-area-inset-bottom, 0px), 16px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .scroll-bottom-pill {
+    bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 16px));
+  }
+
+  .scroll-bottom-pill.hidden {
+    transform: translateX(-50%) translateY(calc(16px + max(env(safe-area-inset-bottom, 0px), 16px))) scale(0.85);
   }
 
   .sidebar {

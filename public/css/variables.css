@@ -44,6 +44,10 @@
   --spring-smooth: cubic-bezier(0.25, 1, 0.5, 1);
   --duration-fast: 0.2s;
   --duration-normal: 0.35s;
+
+  /* Safe notch clearance */
+  --notch-clearance-top: env(safe-area-inset-top, 0px);
+  --notch-clearance-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Dark theme */
